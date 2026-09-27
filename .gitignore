@@ -1,0 +1,26 @@
+# Secrets
+.env
+*.pem
+auth.ini
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Outputs
+receipts/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
