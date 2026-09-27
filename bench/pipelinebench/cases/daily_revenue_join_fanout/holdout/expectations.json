@@ -1,0 +1,80 @@
+{
+  "tables": {
+    "daily_revenue": {
+      "columns": [
+        "order_date",
+        "region",
+        "revenue",
+        "orders"
+      ],
+      "not_null": [
+        "order_date",
+        "region",
+        "revenue"
+      ],
+      "unique": [
+        [
+          "order_date",
+          "region"
+        ]
+      ],
+      "golden": {
+        "key": [
+          "order_date",
+          "region"
+        ],
+        "columns": [
+          "order_date",
+          "region",
+          "revenue",
+          "orders"
+        ],
+        "rows": [
+          [
+            "2026-09-03",
+            "central",
+            75.5,
+            2
+          ],
+          [
+            "2026-09-03",
+            "south",
+            10.0,
+            1
+          ],
+          [
+            "2026-09-04",
+            "north",
+            30.0,
+            1
+          ],
+          [
+            "2026-09-04",
+            "south",
+            5.0,
+            1
+          ],
+          [
+            "2026-09-04",
+            "unknown",
+            70.0,
+            1
+          ]
+        ]
+      },
+      "reconcile": [
+        {
+          "name": "revenue matches billing",
+          "actual": "SELECT ROUND(SUM(revenue), 2) FROM daily_revenue",
+          "expected": "SELECT ROUND(SUM(amount), 2) FROM raw_orders",
+          "tolerance": 0.01
+        },
+        {
+          "name": "every order counted once",
+          "actual": "SELECT SUM(orders) FROM daily_revenue",
+          "expected": "SELECT COUNT(*) FROM raw_orders"
+        }
+      ]
+    }
+  }
+}

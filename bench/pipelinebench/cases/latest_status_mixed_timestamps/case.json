@@ -1,0 +1,10 @@
+{
+  "title": "Order status table shows stale statuses",
+  "issue": "Support sees orders marked 'paid' or 'created' that were actually shipped or cancelled. `raw_order_events` is an event log; `order_status` must hold exactly one row per order with the status of its most recent event. Event timestamps come from several services in different ISO-8601 styles (space or 'T' separator, optional 'Z' or UTC offset). Compare them as real instants and write `updated_at` in UTC as 'YYYY-MM-DD HH:MM:SS'.",
+  "tags": [
+    "timestamps",
+    "timezones",
+    "dedupe",
+    "window-functions"
+  ]
+}

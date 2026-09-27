@@ -1,0 +1,7 @@
+customer_id,name,region,updated_at
+201,Echo,east,2026-07-01
+201,Echo,central,2026-09-01
+201,Echo,west,2026-02-01
+202,Flux,south,2026-01-01
+203,Gale,north,2026-05-05
+203,Gale,north,2026-05-06

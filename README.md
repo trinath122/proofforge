@@ -56,6 +56,16 @@ uv run proofforge smoke      # fixes a real bug end to end on Nebius (~$0.01)
 
 `smoke` writes a proof receipt to `receipts/` as JSON and Markdown.
 
+### Pipeline Doctor and PipelineBench
+
+Pipeline Doctor repairs broken data pipelines and proves each repair with data-quality gates: schema, nulls, uniqueness, golden rows, and reconciliation against the raw source. [PipelineBench](bench/pipelinebench/README.md) is the open set of broken pipelines it is measured on.
+
+```bash
+uv run proofforge bench --validate          # prove every case is broken and solvable; free
+uv run proofforge bench                     # run the agent on all cases; prints solve rate and cost
+uv run proofforge pipeline bench/pipelinebench/cases/payments_schema_drift
+```
+
 Run your own task with `uv run proofforge fix task.json`, where `task.json` follows the `FixTask` schema in [`engine/task.py`](src/proofforge/engine/task.py).
 
 ## Development
@@ -76,13 +86,15 @@ src/proofforge/
   sandbox/    Sandbox interface; ContreeSandbox (real) and LocalSandbox (tests only)
   gates/      Gate specs, frozen oracle, tamper detection, parallel gate runner
   engine/     Task schema, prompts, the verification loop with branch search
+  playbooks/  Pipeline Doctor: case loader, validation, sandbox-side runner and DQ checker
   receipts/   Receipt schema and JSON/Markdown writer
-  cli.py      doctor, smoke, fix
+  cli.py      doctor, smoke, fix, pipeline, bench
+bench/pipelinebench/  Broken-pipeline cases with hidden holdout data
 ```
 
 ## Roadmap
 
-Pipeline Doctor, Build, Upgrade, Proof-Carrying Tests and Accelerate playbooks; Breaker agent; SWE-rebench, Spider 2.0-DBT and ImpossibleBench evaluation; fine-tuning Nemotron-3.5-Lightning on verified trajectories; web UI.
+More PipelineBench cases (dbt, PySpark), Build, Upgrade, Proof-Carrying Tests and Accelerate playbooks; Breaker agent; SWE-rebench, Spider 2.0-DBT and ImpossibleBench evaluation; fine-tuning Nemotron-3.5-Lightning on verified trajectories; web UI.
 
 ## License
 

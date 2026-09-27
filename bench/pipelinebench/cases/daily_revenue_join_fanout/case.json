@@ -1,0 +1,10 @@
+{
+  "title": "Regional revenue is inflated and new customers' orders are missing",
+  "issue": "Finance reports that daily revenue on the regional dashboard is higher than the billing system, and orders from brand-new customers are missing entirely. `raw_customers` keeps one row per customer change (history); a customer must be counted under their most recent region by `updated_at`. Orders whose customer is not in `raw_customers` must still be counted, under region 'unknown'. `revenue` is rounded to 2 decimals and `orders` is the order count.",
+  "tags": [
+    "join",
+    "fan-out",
+    "scd",
+    "left-join"
+  ]
+}

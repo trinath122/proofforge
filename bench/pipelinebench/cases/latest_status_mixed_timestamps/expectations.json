@@ -1,0 +1,55 @@
+{
+  "tables": {
+    "order_status": {
+      "columns": [
+        "order_id",
+        "status",
+        "updated_at"
+      ],
+      "not_null": [
+        "order_id",
+        "status",
+        "updated_at"
+      ],
+      "unique": [
+        [
+          "order_id"
+        ]
+      ],
+      "golden": {
+        "key": [
+          "order_id"
+        ],
+        "columns": [
+          "order_id",
+          "status",
+          "updated_at"
+        ],
+        "rows": [
+          [
+            1,
+            "shipped",
+            "2026-09-01 10:15:00"
+          ],
+          [
+            2,
+            "cancelled",
+            "2026-09-02 07:45:00"
+          ],
+          [
+            3,
+            "created",
+            "2026-09-02 11:00:00"
+          ]
+        ]
+      },
+      "reconcile": [
+        {
+          "name": "one row per order",
+          "actual": "SELECT COUNT(*) FROM order_status",
+          "expected": "SELECT COUNT(DISTINCT order_id) FROM raw_order_events"
+        }
+      ]
+    }
+  }
+}

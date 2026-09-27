@@ -1,0 +1,6 @@
+payment_id,order_id,amount_cents,currency,paid_at
+1,1,12000,USD,2026-09-20
+2,2,8050,usd,2026-09-20
+3,3,4000,EUR,2026-09-21
+4,4,1999,eur,2026-09-21
+5,5,500,USD,2026-09-21

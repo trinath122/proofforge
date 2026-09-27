@@ -1,0 +1,62 @@
+{
+  "tables": {
+    "revenue_by_currency": {
+      "columns": [
+        "currency",
+        "revenue",
+        "payments"
+      ],
+      "not_null": [
+        "currency",
+        "revenue",
+        "payments"
+      ],
+      "unique": [
+        [
+          "currency"
+        ]
+      ],
+      "accepted_values": {
+        "currency": [
+          "GBP",
+          "USD"
+        ]
+      },
+      "golden": {
+        "key": [
+          "currency"
+        ],
+        "columns": [
+          "currency",
+          "revenue",
+          "payments"
+        ],
+        "rows": [
+          [
+            "GBP",
+            1.0,
+            2
+          ],
+          [
+            "USD",
+            2503.33,
+            2
+          ]
+        ]
+      },
+      "reconcile": [
+        {
+          "name": "revenue matches payments",
+          "actual": "SELECT ROUND(SUM(revenue), 2) FROM revenue_by_currency",
+          "expected": "SELECT ROUND(SUM(amount_cents) / 100.0, 2) FROM raw_payments",
+          "tolerance": 0.01
+        },
+        {
+          "name": "every payment counted once",
+          "actual": "SELECT SUM(payments) FROM revenue_by_currency",
+          "expected": "SELECT COUNT(*) FROM raw_payments"
+        }
+      ]
+    }
+  }
+}

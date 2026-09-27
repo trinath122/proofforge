@@ -1,0 +1,7 @@
+customer_id,name,region,updated_at
+101,Acme,east,2026-01-10
+101,Acme,west,2026-06-01
+102,Bolt,east,2026-03-05
+103,Cora,south,2026-02-11
+103,Cora,south,2026-08-20
+105,Dune,north,2026-04-01

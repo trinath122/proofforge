@@ -1,0 +1,10 @@
+{
+  "title": "Revenue job fails after upstream payments schema change",
+  "issue": "Since Sep 20 the upstream payments export sends `amount_cents` (integer cents) instead of `amount` (dollars), and currency codes can now arrive in any letter case. The revenue job has been failing since. Revenue must stay in major currency units (e.g. dollars), rounded to 2 decimals, grouped by upper-case ISO currency code, with `payments` as the payment count.",
+  "tags": [
+    "schema-drift",
+    "units",
+    "integer-division",
+    "normalization"
+  ]
+}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -18,6 +19,7 @@ from proofforge.demo import median_task
 from proofforge.engine import Engine, FixTask
 from proofforge.llm.client import TokenFactoryLLM
 from proofforge.models.registry import MODELS, Mode
+from proofforge.playbooks import CaseValidation, discover_cases, load_case, validate_case
 from proofforge.receipts import Receipt, write_receipt
 from proofforge.sandbox.contree import ContreeSandbox
 
@@ -136,6 +138,106 @@ def fix(
     receipt = asyncio.run(engine.fix(task))
     _report(receipt, settings)
     raise typer.Exit(0 if receipt.status == "verified" else 1)
+
+
+DEFAULT_CASES = Path("bench/pipelinebench/cases")
+
+
+def _select(cases_dir: Path, only: list[str] | None) -> list[Path]:
+    found = discover_cases(cases_dir)
+    if only:
+        found = [c for c in found if c.name in set(only)]
+    if not found:
+        console.print(f"[red]No PipelineBench cases found in {cases_dir}[/red]")
+        raise typer.Exit(2)
+    return found
+
+
+@app.command()
+def pipeline(
+    case: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
+    mode: Annotated[Mode | None, typer.Option()] = None,
+) -> None:
+    """Pipeline Doctor: repair one PipelineBench case directory."""
+    settings = _settings(mode)
+    engine, _ = _engine(settings)
+    receipt = asyncio.run(engine.fix(load_case(case)))
+    _report(receipt, settings)
+    raise typer.Exit(0 if receipt.status == "verified" else 1)
+
+
+@app.command()
+def bench(
+    cases: Annotated[Path, typer.Option(help="PipelineBench cases directory")] = DEFAULT_CASES,
+    only: Annotated[list[str] | None, typer.Option("--case", help="run only these")] = None,
+    validate: Annotated[
+        bool, typer.Option(help="no model calls: prove each case is broken and solvable")
+    ] = False,
+    mode: Annotated[Mode | None, typer.Option()] = None,
+) -> None:
+    """Run PipelineBench and report solve rate, cost and time."""
+    load_dotenv()
+    selected = _select(cases, only)
+
+    if validate:
+        results = asyncio.run(_validate_all(selected))
+        table = Table("Case", "Shipped pipeline fails", "Reference solution passes", "Valid")
+        for v in results:
+            table.add_row(
+                v.case,
+                str(v.broken_fails_visible),
+                str(v.solution_passes_all),
+                "[green]yes[/green]" if v.valid else "[red]NO[/red]",
+            )
+        console.print(table)
+        raise typer.Exit(0 if all(v.valid for v in results) else 1)
+
+    settings = _settings(mode)
+    engine, budget = _engine(settings)
+    receipts = asyncio.run(_run_all(engine, selected, settings))
+    table = Table("Case", "Status", "Attempts", "Cost", "Time")
+    for r in receipts:
+        color = "green" if r.status == "verified" else "yellow"
+        table.add_row(
+            r.task_title.split("] ")[1].split(":")[0],
+            f"[{color}]{r.status}[/{color}]",
+            str(len(r.attempts)),
+            f"${r.total_cost_usd:.4f}",
+            f"{r.wall_time_s:.1f}s",
+        )
+    console.print(table)
+    solved = sum(r.status == "verified" for r in receipts)
+    summary = {
+        "benchmark": "PipelineBench",
+        "mode": settings.mode.value,
+        "solved": solved,
+        "total": len(receipts),
+        "solve_rate": solved / len(receipts),
+        "total_cost_usd": budget.session.cost_usd,
+        "receipts": [r.run_id for r in receipts],
+    }
+    out = Path(settings.receipts_dir) / f"bench-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    console.print(
+        f"[bold]Solved {solved}/{len(receipts)}[/bold] in mode {settings.mode.value} for "
+        f"${budget.session.cost_usd:.4f}. Summary: {out}"
+    )
+    raise typer.Exit(0 if solved == len(receipts) else 1)
+
+
+async def _validate_all(selected: list[Path]) -> list[CaseValidation]:
+    sandbox = ContreeSandbox()
+    return list(await asyncio.gather(*(validate_case(sandbox, c) for c in selected)))
+
+
+async def _run_all(engine: Engine, selected: list[Path], settings: Settings) -> list[Receipt]:
+    receipts: list[Receipt] = []
+    for case in selected:
+        console.print(f"[dim]running {case.name}...[/dim]")
+        receipt = await engine.fix(load_case(case))
+        write_receipt(receipt, settings.receipts_dir)
+        receipts.append(receipt)
+    return receipts
 
 
 if __name__ == "__main__":
