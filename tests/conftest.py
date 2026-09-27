@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shlex
 import sys
 from collections.abc import Callable
 
@@ -14,7 +13,14 @@ from proofforge.llm.base import Completion, Message
 from proofforge.models.registry import MODELS, Role
 from proofforge.sandbox.local import LocalSandbox
 
-PY = shlex.quote(sys.executable)
+# Double quotes work in both POSIX sh and Windows cmd.
+PY = f'"{sys.executable}"'
+
+
+def py(code: str) -> str:
+    """A portable shell command that runs a one-line Python snippet."""
+    return f'{PY} -c "{code}"'
+
 
 GOOD_FIX = '''### FILE: stats.py
 ```python

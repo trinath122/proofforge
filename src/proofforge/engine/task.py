@@ -5,13 +5,14 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, model_validator
 
 from proofforge.gates.base import GateSpec, Oracle
+from proofforge.sandbox.base import NOOP
 
 
 class FixTask(BaseModel):
     title: str
     description: str
     image: str = "python:3.12-slim"
-    setup_command: str = "true"
+    setup_command: str = NOOP
     editable: dict[str, str] = Field(description="files the agent may change: path -> content")
     context: dict[str, str] = Field(
         default_factory=dict, description="read-only files shown to the agent"

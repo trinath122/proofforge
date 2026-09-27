@@ -20,7 +20,7 @@ from proofforge.models.registry import (
 )
 from proofforge.receipts import Attempt, Receipt, render_markdown, write_receipt
 from proofforge.sandbox.local import LocalSandbox
-from tests.conftest import GOOD_FIX
+from tests.conftest import GOOD_FIX, py
 
 
 def test_models_match_console_values() -> None:
@@ -187,5 +187,5 @@ async def test_local_sandbox_branches_are_independent(tmp_path: Path) -> None:
     assert (await sb.read(a.checkpoint, "/workspace/state.txt")).strip() == b"A"
     assert (await sb.read(b.checkpoint, "/workspace/state.txt")).strip() == b"B"
     assert (await sb.read(v1.checkpoint, "state.txt")).strip() == b"v1"
-    timeout = await sb.run(v1.checkpoint, "sleep 5", timeout_s=1, keep=False)
+    timeout = await sb.run(v1.checkpoint, py("import time; time.sleep(3)"), timeout_s=1, keep=False)
     assert timeout.exit_code != 0

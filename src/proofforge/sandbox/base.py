@@ -12,6 +12,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict
 
 WORKDIR = "/workspace"
+NOOP = "true"  # a run that only writes files
 
 
 class Checkpoint(BaseModel):

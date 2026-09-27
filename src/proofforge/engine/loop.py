@@ -27,7 +27,7 @@ from proofforge.gates.base import (
 from proofforge.llm.base import LLM
 from proofforge.models.registry import Mode, Role
 from proofforge.receipts.schema import Attempt, ModelUsage, Receipt, Status
-from proofforge.sandbox.base import Checkpoint, Sandbox
+from proofforge.sandbox.base import NOOP, Checkpoint, Sandbox
 
 
 @dataclass
@@ -198,7 +198,7 @@ class Engine:
 
         applied = await self.sandbox.run(
             state.checkpoint,
-            "true",
+            NOOP,
             files={workspace_path(p): c.encode() for p, c in allowed.items()},
             keep=True,
         )

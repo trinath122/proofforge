@@ -13,7 +13,7 @@ import time
 import uuid
 from pathlib import Path
 
-from proofforge.sandbox.base import WORKDIR, Checkpoint, ExecResult
+from proofforge.sandbox.base import NOOP, WORKDIR, Checkpoint, ExecResult
 
 
 class LocalSandbox:
@@ -50,21 +50,14 @@ class LocalSandbox:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
         started = time.monotonic()
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            cwd=workdir,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        code, out, err = (
+            (0, b"", b"")
+            if command.strip() == NOOP
+            else (await self._exec(command, workdir, timeout_s))
         )
-        try:
-            out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
-        except TimeoutError:
-            proc.kill()
-            await proc.communicate()
-            out, err = b"", b"timeout"
         result = ExecResult(
             checkpoint=new if keep else at,
-            exit_code=proc.returncode if proc.returncode is not None else 124,
+            exit_code=code,
             stdout=out.decode(errors="replace"),
             stderr=err.decode(errors="replace"),
             elapsed_s=time.monotonic() - started,
@@ -73,6 +66,22 @@ class LocalSandbox:
             shutil.rmtree(workdir)
             del self._dirs[new.id]
         return result
+
+    @staticmethod
+    async def _exec(command: str, cwd: Path, timeout_s: int) -> tuple[int, bytes, bytes]:
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+        except TimeoutError:
+            proc.kill()
+            await proc.communicate()
+            return 124, b"", b"timeout"
+        return (proc.returncode if proc.returncode is not None else 1), out, err
 
     async def read(self, at: Checkpoint, path: str) -> bytes:
         return self._host_path(at, path).read_bytes()
