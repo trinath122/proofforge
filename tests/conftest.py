@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -9,7 +11,7 @@ from proofforge.budget import BudgetGuard
 from proofforge.demo import median_task
 from proofforge.engine.task import FixTask
 from proofforge.gates.base import GateSpec
-from proofforge.llm.base import Completion, Message
+from proofforge.llm.base import Completion, Message, ToolCall
 from proofforge.models.registry import MODELS, Role
 from proofforge.sandbox.local import LocalSandbox
 
@@ -49,12 +51,23 @@ print("tests? what tests")
 ```"""
 
 
+Step = str | list[tuple[str, dict[str, Any]]]
+
+
+def calls(*items: tuple[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """A scripted agent step made of tool calls: calls(("read_file", {"path": "x"}))."""
+    return list(items)
+
+
 class ScriptedLLM:
-    """Returns canned responses in order and charges the budget like the real client."""
+    """Returns canned responses in order and charges the budget like the real client.
+
+    A response is either text, or a list of (tool name, arguments) tool calls.
+    """
 
     def __init__(
         self,
-        responses: list[str] | Callable[[Role, list[Message], float], str],
+        responses: list[Step] | Callable[[Role, list[Message], float], Step],
         budget: BudgetGuard,
         tokens: tuple[int, int] = (1000, 200),
         finish_reasons: list[str] | None = None,
@@ -66,20 +79,35 @@ class ScriptedLLM:
         self.calls: list[tuple[Role, list[Message], float]] = []
 
     async def complete(
-        self, role: Role, messages: list[Message], *, temperature: float = 0.2
+        self,
+        role: Role,
+        messages: list[Message],
+        *,
+        temperature: float = 0.2,
+        tools: list[dict[str, Any]] | None = None,
     ) -> Completion:
         self._budget.ensure_headroom()
-        self.calls.append((role, messages, temperature))
+        self.calls.append((role, list(messages), temperature))
         if callable(self._responses):
-            text = self._responses(role, messages, temperature)
+            step = self._responses(role, messages, temperature)
         else:
-            text = self._responses[len(self.calls) - 1]
+            step = self._responses[len(self.calls) - 1]
+        text = step if isinstance(step, str) else ""
+        tool_calls = (
+            []
+            if isinstance(step, str)
+            else [
+                ToolCall(id=f"call_{len(self.calls)}_{i}", name=n, arguments=json.dumps(a))
+                for i, (n, a) in enumerate(step)
+            ]
+        )
         spec = MODELS["lightning"]
         cost = self._budget.charge(spec, *self._tokens)
         n = len(self.calls) - 1
         return Completion(
             text=text,
             finish_reason=self._finish[n] if n < len(self._finish) else "stop",
+            tool_calls=tool_calls,
             model_key=spec.key,
             prompt_tokens=self._tokens[0],
             completion_tokens=self._tokens[1],

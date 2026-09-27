@@ -56,14 +56,27 @@ uv run proofforge smoke      # fixes a real bug end to end on Nebius (~$0.01)
 
 `smoke` writes a proof receipt to `receipts/` as JSON and Markdown.
 
+### The agent
+
+For multi-file work ProofForge runs as a tool-using agent inside the sandbox: it lists, reads
+and searches files, runs commands and tests, edits code, and submits when its own checks pass.
+Writes to frozen test files are refused; changes made to them through shell commands are
+detected and disqualify the attempt. Every step is recorded in the receipt as a trajectory.
+
+```bash
+uv run proofforge solve bench/realworld/cases/rate_limiter_token_bucket    # agent by default
+uv run proofforge bench --suite realworld                                  # hard multi-file cases
+uv run proofforge bench --strategy agent                                   # agent on every suite
+```
+
 ### Pipeline Doctor and PipelineBench
 
 Pipeline Doctor repairs broken data pipelines and proves each repair with data-quality gates: schema, nulls, uniqueness, golden rows, and reconciliation against the raw source. [PipelineBench](bench/pipelinebench/README.md) is the open set of broken pipelines it is measured on.
 
 ```bash
 uv run proofforge bench --validate          # prove every case is broken and solvable; free
-uv run proofforge bench                     # run the agent on all cases; prints solve rate and cost
-uv run proofforge pipeline bench/pipelinebench/cases/payments_schema_drift
+uv run proofforge bench --suite pipeline    # run on PipelineBench; prints solve rate and cost
+uv run proofforge solve bench/pipelinebench/cases/multicurrency_revenue_rollup
 ```
 
 Run your own task with `uv run proofforge fix task.json`, where `task.json` follows the `FixTask` schema in [`engine/task.py`](src/proofforge/engine/task.py).
@@ -85,11 +98,13 @@ src/proofforge/
   llm/        Token Factory client with budget enforcement
   sandbox/    Sandbox interface; ContreeSandbox (real) and LocalSandbox (tests only)
   gates/      Gate specs, frozen oracle, tamper detection, parallel gate runner
-  engine/     Task schema, prompts, the verification loop with branch search
-  playbooks/  Pipeline Doctor: case loader, validation, sandbox-side runner and DQ checker
+  engine/     Task schema, prompts, verification loop with branch search, agent tools
+  playbooks/  Pipeline Doctor and RealWorld case loaders, validation, sandbox-side checkers
+  bench.py    Suite discovery (PipelineBench, RealWorld)
   receipts/   Receipt schema and JSON/Markdown writer
-  cli.py      doctor, smoke, fix, pipeline, bench
+  cli.py      doctor, smoke, fix, solve, pipeline, bench
 bench/pipelinebench/  Broken-pipeline cases with hidden holdout data
+bench/realworld/      Hard multi-file cases (concurrency, reliability, system components)
 ```
 
 ## Roadmap

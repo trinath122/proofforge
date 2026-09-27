@@ -39,6 +39,8 @@ packages = ["src/proofforge"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+# Benchmark content is deliberately buggy or mirrors real-world style; never auto-fix it.
+extend-exclude = ["bench/*/cases", "tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "PT", "RET", "PL"]
@@ -46,6 +48,7 @@ ignore = ["PLR0913", "PLR2004", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004", "S108", "ASYNC240"]
+"bench/**/tools/*" = ["S311", "S608", "PLR0912", "PLR0915", "PLR0917", "E501"]
 
 [tool.mypy]
 python_version = "3.12"

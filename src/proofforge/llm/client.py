@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from openai import AsyncOpenAI
 
 from proofforge.budget import BudgetGuard
-from proofforge.llm.base import Completion, Message
+from proofforge.llm.base import Completion, Message, ToolCall
 from proofforge.models.registry import (
     GLOBAL_BASE_URL,
     US_CENTRAL1_BASE_URL,
@@ -33,23 +35,37 @@ class TokenFactoryLLM:
         return self._clients[base_url]
 
     async def complete(
-        self, role: Role, messages: list[Message], *, temperature: float = 0.2
+        self,
+        role: Role,
+        messages: list[Message],
+        *,
+        temperature: float = 0.2,
+        tools: list[dict[str, Any]] | None = None,
     ) -> Completion:
         spec = model_for(role, self._mode)
         self._budget.ensure_headroom()
+        extra: dict[str, Any] = {"tools": tools, "tool_choice": "auto"} if tools else {}
         response = await self._client(spec.base_url).chat.completions.create(
             model=spec.model_id,
-            messages=[{"role": m.role, "content": m.content} for m in messages],  # type: ignore[misc]
+            messages=[m.to_openai() for m in messages],  # type: ignore[misc]
             temperature=temperature,
             max_tokens=MAX_OUTPUT_TOKENS,
+            **extra,
         )
         usage = response.usage
         prompt = usage.prompt_tokens if usage else 0
         completion = usage.completion_tokens if usage else 0
         cost = self._budget.charge(spec, prompt, completion)
+        choice = response.choices[0]
+        calls = [
+            ToolCall(id=c.id, name=c.function.name, arguments=c.function.arguments or "{}")
+            for c in (choice.message.tool_calls or [])
+            if c.type == "function"
+        ]
         return Completion(
-            text=response.choices[0].message.content or "",
-            finish_reason=response.choices[0].finish_reason,
+            text=choice.message.content or "",
+            finish_reason=choice.finish_reason,
+            tool_calls=calls,
             model_key=spec.key,
             prompt_tokens=prompt,
             completion_tokens=completion,

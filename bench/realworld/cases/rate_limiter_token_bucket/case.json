@@ -1,0 +1,11 @@
+{
+  "title": "API gateway rate limiter admits bursts and leaks memory",
+  "difficulty": "hard",
+  "tags": ["system-design", "concurrency", "rate-limiting", "memory-bounds", "clock-skew"],
+  "issue": "Incident report: our API gateway's `ratelimit.RateLimiter` lets clients exceed their quota (bursts pass right after a window boundary, and some requests slip through under concurrent load), and gateway memory grows without bound because it keeps state for every client key it has ever seen.\n\nReplace it with a correct token-bucket limiter. The public API is fixed and documented in `README.md`; callers depend on it:\n\n- `RateLimiter(rate, capacity, clock=None, max_keys=10_000, idle_ttl=300.0)`. `rate` (tokens/second, float) must be > 0 and `capacity` (int) >= 1, otherwise `ValueError`. `clock` is a zero-argument callable returning seconds (default `time.monotonic`).\n- Each key has a bucket that starts full and refills continuously at `rate` tokens per second up to `capacity`. Fractional refill counts.\n- `allow(key, cost=1) -> bool` atomically consumes `cost` tokens if available and returns True, otherwise returns False and consumes nothing. `cost` must be an int in `1..capacity`, otherwise `ValueError`.\n- `retry_after(key, cost=1) -> float` returns the seconds until `cost` tokens will be available (0.0 if available now). It does not consume tokens.\n- Thread safety: concurrent callers must never be admitted beyond what the bucket allows.\n- Memory: never hold more than `max_keys` buckets; when full, evict the least recently used key. A bucket untouched for `idle_ttl` seconds or more must be dropped no later than the next call to `allow`. `len(limiter)` returns the number of buckets currently held.\n- The clock can jump backwards (NTP corrections). That must never raise and must never grant extra tokens, including after the clock moves forward again.",
+  "protected": ["tests/*"],
+  "gates": [
+    {"name": "visible-tests", "command": "{python} -m unittest discover -s tests -t . -q"},
+    {"name": "hidden-tests", "command": "{python} -m unittest discover -s hidden_tests -t . -q", "kind": "holdout"}
+  ]
+}

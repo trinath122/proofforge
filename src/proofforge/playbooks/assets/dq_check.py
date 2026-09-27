@@ -9,7 +9,7 @@ Supported expectations per table:
   not_null         columns that must never be NULL
   unique           list of column groups that must be unique
   accepted_values  {column: [allowed values]}
-  golden           {"key": [cols], "columns": [cols], "rows": [[...], ...]}  exact contents
+  golden           {"key", "columns", "rows", "tolerance"?}  exact contents (numeric tolerance)
   reconcile        [{"name", "actual", "expected", "tolerance"}]  two scalar SQL queries
 """
 
@@ -83,11 +83,12 @@ class Checker:
         key = ", ".join(f'"{c}"' for c in gold["key"])
         got = [list(r) for r in self.db.execute(f"SELECT {cols} FROM {q} ORDER BY {key}")]  # noqa: S608
         want = gold["rows"]
+        tol = float(gold.get("tolerance", FLOAT_TOL))
         if len(got) != len(want):
             self.report(False, f"{name}: golden rows", f"expected {len(want)} rows, got {len(got)}")
             return
         for g, w in zip(got, want, strict=True):
-            if not all(same(a, b) for a, b in zip(g, w, strict=True)):
+            if not all(same(a, b, tol) for a, b in zip(g, w, strict=True)):
                 self.report(False, f"{name}: golden rows", f"first mismatch: got {g}, want {w}")
                 return
         self.report(True, f"{name}: golden rows")

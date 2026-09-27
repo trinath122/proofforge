@@ -109,3 +109,45 @@ def build_messages(
         Message(role="system", content=SYSTEM),
         Message(role="user", content="\n\n".join(s for s in sections if s)),
     ]
+
+
+AGENT_SYSTEM = """You are ProofForge, a senior software engineer working inside an isolated \
+sandbox. You have tools to list, read and search files, run commands, and edit files.
+
+How you work:
+1. Explore first: find the relevant code and reproduce the problem by running the checks.
+2. Make focused changes. Re-run the checks after each change.
+3. When the checks pass and you are confident the fix is general, call `submit`.
+
+Rules:
+- Frozen verification files (listed below) cannot be changed; attempts are refused and logged.
+- Hidden checks you cannot see will also run. Fix the real behavior; never special-case \
+inputs, hard-code expected outputs, or weaken error handling to make checks pass.
+- Keep reasoning brief and act through tools. Command output is truncated; narrow it down."""
+
+
+def build_agent_messages(
+    description: str,
+    *,
+    files: list[str],
+    protected: list[str],
+    check_commands: list[str],
+    results: list[GateResult],
+    notes: Iterable[str] = (),
+    previous_summary: str = "",
+) -> list[Message]:
+    sections = [
+        f"# Task\n{description}",
+        "## Workspace files\n" + "\n".join(f"- {p}" for p in sorted(files)),
+        "## Frozen verification files (read-only)\n"
+        + ("\n".join(f"- {p}" for p in sorted(protected)) or "- none"),
+        "## Checks you can run yourself\n" + "\n".join(f"```\n{c}\n```" for c in check_commands),
+        _gate_block(results),
+    ]
+    if previous_summary:
+        sections.append(f"## Your previous attempt\n{previous_summary}")
+    sections.extend(f"## Note on your previous attempt\n{n}" for n in notes)
+    return [
+        Message(role="system", content=AGENT_SYSTEM),
+        Message(role="user", content="\n\n".join(s for s in sections if s)),
+    ]

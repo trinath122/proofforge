@@ -9,6 +9,7 @@ from __future__ import annotations
 import configparser
 import os
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +47,8 @@ class Settings(BaseSettings):
     session_budget_usd: float = Field(default=2.00, gt=0)
     max_fix_attempts: int = Field(default=3, ge=1, le=20)
     branch_width: int = Field(default=1, ge=1, le=8)
+    strategy: Literal["auto", "rewrite", "agent"] = "auto"
+    max_agent_steps: int = Field(default=30, ge=1, le=200)
     receipts_dir: str = "receipts"
 
     @model_validator(mode="after")

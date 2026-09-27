@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -33,6 +33,11 @@ class Attempt(BaseModel):
     error: str | None = None
     finish_reason: str | None = None
     response_excerpt: str = Field(default="", description="tail of the raw model reply")
+    steps: int = 0
+    summary: str = ""
+    transcript: list[dict[str, Any]] = Field(
+        default_factory=list, description="full agent conversation; training data"
+    )
 
     @property
     def visible_passed(self) -> int:

@@ -1,0 +1,187 @@
+{
+  "tables": {
+    "monthly_region_revenue": {
+      "columns": [
+        "month",
+        "region",
+        "orders",
+        "gross_usd",
+        "refunds_usd",
+        "net_usd"
+      ],
+      "not_null": [
+        "month",
+        "region",
+        "orders",
+        "gross_usd",
+        "refunds_usd",
+        "net_usd"
+      ],
+      "unique": [
+        [
+          "month",
+          "region"
+        ]
+      ],
+      "accepted_values": {
+        "region": [
+          "na",
+          "emea",
+          "apac",
+          "latam",
+          "unknown"
+        ]
+      },
+      "golden": {
+        "key": [
+          "month",
+          "region"
+        ],
+        "columns": [
+          "month",
+          "region",
+          "orders",
+          "gross_usd",
+          "refunds_usd",
+          "net_usd"
+        ],
+        "rows": [
+          [
+            "2026-06",
+            "apac",
+            43,
+            19500.28,
+            2570.97,
+            16929.31
+          ],
+          [
+            "2026-06",
+            "emea",
+            38,
+            17416.22,
+            576.73,
+            16839.49
+          ],
+          [
+            "2026-06",
+            "latam",
+            32,
+            16577.07,
+            1404.72,
+            15172.35
+          ],
+          [
+            "2026-06",
+            "na",
+            20,
+            10670.43,
+            487.11,
+            10183.32
+          ],
+          [
+            "2026-06",
+            "unknown",
+            5,
+            1549.84,
+            270.24,
+            1279.6
+          ],
+          [
+            "2026-07",
+            "apac",
+            30,
+            16866.85,
+            1590.64,
+            15276.21
+          ],
+          [
+            "2026-07",
+            "emea",
+            38,
+            18788.6,
+            894.22,
+            17894.38
+          ],
+          [
+            "2026-07",
+            "latam",
+            33,
+            18013.23,
+            1070.75,
+            16942.49
+          ],
+          [
+            "2026-07",
+            "na",
+            15,
+            7484.85,
+            148.71,
+            7336.14
+          ],
+          [
+            "2026-07",
+            "unknown",
+            3,
+            2192.11,
+            0.0,
+            2192.11
+          ],
+          [
+            "2026-08",
+            "apac",
+            31,
+            16442.68,
+            1497.87,
+            14944.81
+          ],
+          [
+            "2026-08",
+            "emea",
+            32,
+            16072.97,
+            1540.92,
+            14532.05
+          ],
+          [
+            "2026-08",
+            "latam",
+            25,
+            12023.98,
+            1027.0,
+            10996.98
+          ],
+          [
+            "2026-08",
+            "na",
+            20,
+            10058.62,
+            983.61,
+            9075.01
+          ],
+          [
+            "2026-08",
+            "unknown",
+            4,
+            1328.32,
+            190.9,
+            1137.42
+          ]
+        ],
+        "tolerance": 0.011
+      },
+      "reconcile": [
+        {
+          "name": "each completed order counted once",
+          "actual": "SELECT SUM(orders) FROM monthly_region_revenue",
+          "expected": "SELECT COUNT(*) FROM (SELECT status, ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY _ingested_at DESC) AS rn FROM raw_orders_ingest) WHERE rn = 1 AND status = 'completed'"
+        },
+        {
+          "name": "net = gross - refunds",
+          "actual": "SELECT ROUND(SUM(net_usd), 2) FROM monthly_region_revenue",
+          "expected": "SELECT ROUND(SUM(gross_usd) - SUM(refunds_usd), 2) FROM monthly_region_revenue",
+          "tolerance": 0.05
+        }
+      ]
+    }
+  }
+}

@@ -13,13 +13,15 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
+from proofforge.bench import SUITES, Case, SuiteName, detect, discover
 from proofforge.budget import BudgetGuard
 from proofforge.config import Settings
 from proofforge.demo import median_task
 from proofforge.engine import Engine, FixTask
+from proofforge.engine.loop import Strategy
 from proofforge.llm.client import TokenFactoryLLM
 from proofforge.models.registry import MODELS, Mode
-from proofforge.playbooks import CaseValidation, discover_cases, load_case, validate_case
+from proofforge.playbooks import CaseValidation
 from proofforge.receipts import Receipt, write_receipt
 from proofforge.sandbox.contree import ContreeSandbox
 
@@ -52,8 +54,13 @@ def _engine(settings: Settings) -> tuple[Engine, BudgetGuard]:
         mode=settings.mode,
         max_rounds=settings.max_fix_attempts,
         branch_width=settings.branch_width,
+        max_steps=settings.max_agent_steps,
     )
     return engine, budget
+
+
+def _strategy_for(case: Case, settings: Settings) -> Strategy:
+    return case.default_strategy if settings.strategy == "auto" else settings.strategy
 
 
 def _report(receipt: Receipt, settings: Settings) -> None:
@@ -140,17 +147,34 @@ def fix(
     raise typer.Exit(0 if receipt.status == "verified" else 1)
 
 
-DEFAULT_CASES = Path("bench/pipelinebench/cases")
+StrategyOption = Annotated[
+    str | None, typer.Option(help="rewrite | agent (default: auto per suite)")
+]
 
 
-def _select(cases_dir: Path, only: list[str] | None) -> list[Path]:
-    found = discover_cases(cases_dir)
-    if only:
-        found = [c for c in found if c.name in set(only)]
-    if not found:
-        console.print(f"[red]No PipelineBench cases found in {cases_dir}[/red]")
-        raise typer.Exit(2)
-    return found
+def _apply_strategy(settings: Settings, strategy: str | None) -> None:
+    if strategy is not None:
+        if strategy not in ("rewrite", "agent", "auto"):
+            console.print("[red]--strategy must be rewrite, agent or auto[/red]")
+            raise typer.Exit(2)
+        settings.strategy = strategy  # type: ignore[assignment]
+
+
+@app.command()
+def solve(
+    case: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
+    mode: Annotated[Mode | None, typer.Option()] = None,
+    strategy: StrategyOption = None,
+) -> None:
+    """Solve one PipelineBench or RealWorld case directory."""
+    settings = _settings(mode)
+    _apply_strategy(settings, strategy)
+    found = detect(case)
+    engine, _ = _engine(settings)
+    engine.strategy = _strategy_for(found, settings)
+    receipt = asyncio.run(engine.fix(found.load()))
+    _report(receipt, settings)
+    raise typer.Exit(0 if receipt.status == "verified" else 1)
 
 
 @app.command()
@@ -158,32 +182,37 @@ def pipeline(
     case: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
     mode: Annotated[Mode | None, typer.Option()] = None,
 ) -> None:
-    """Pipeline Doctor: repair one PipelineBench case directory."""
-    settings = _settings(mode)
-    engine, _ = _engine(settings)
-    receipt = asyncio.run(engine.fix(load_case(case)))
-    _report(receipt, settings)
-    raise typer.Exit(0 if receipt.status == "verified" else 1)
+    """Pipeline Doctor: repair one PipelineBench case (alias of `solve`)."""
+    solve(case, mode, None)
 
 
 @app.command()
 def bench(
-    cases: Annotated[Path, typer.Option(help="PipelineBench cases directory")] = DEFAULT_CASES,
+    suite: Annotated[str, typer.Option(help="pipeline | realworld | all")] = "all",
     only: Annotated[list[str] | None, typer.Option("--case", help="run only these")] = None,
     validate: Annotated[
         bool, typer.Option(help="no model calls: prove each case is broken and solvable")
     ] = False,
     mode: Annotated[Mode | None, typer.Option()] = None,
+    strategy: StrategyOption = None,
 ) -> None:
-    """Run PipelineBench and report solve rate, cost and time."""
+    """Run the benchmark suites and report solve rate, cost and time."""
     load_dotenv()
-    selected = _select(cases, only)
+    if suite not in ("pipeline", "realworld", "all"):
+        console.print("[red]--suite must be pipeline, realworld or all[/red]")
+        raise typer.Exit(2)
+    suites: tuple[SuiteName, ...] = SUITES if suite == "all" else (suite,)  # type: ignore[assignment]
+    selected = discover(suites, only=only)
+    if not selected:
+        console.print("[red]No cases found. Run from the repository root.[/red]")
+        raise typer.Exit(2)
 
     if validate:
         results = asyncio.run(_validate_all(selected))
-        table = Table("Case", "Shipped pipeline fails", "Reference solution passes", "Valid")
-        for v in results:
+        table = Table("Suite", "Case", "Shipped code fails", "Reference solution passes", "Valid")
+        for c, v in zip(selected, results, strict=True):
             table.add_row(
+                c.suite,
                 v.case,
                 str(v.broken_fails_visible),
                 str(v.solution_passes_all),
@@ -193,28 +222,44 @@ def bench(
         raise typer.Exit(0 if all(v.valid for v in results) else 1)
 
     settings = _settings(mode)
+    _apply_strategy(settings, strategy)
     engine, budget = _engine(settings)
     receipts = asyncio.run(_run_all(engine, selected, settings))
-    table = Table("Case", "Status", "Attempts", "Cost", "Time")
-    for r in receipts:
+    table = Table("Suite", "Case", "Strategy", "Status", "Attempts", "Steps", "Cost", "Time")
+    for c, r in zip(selected, receipts, strict=True):
         color = "green" if r.status == "verified" else "yellow"
         table.add_row(
-            r.task_title.split("] ")[1].split(":")[0],
+            c.suite,
+            c.name,
+            _strategy_for(c, settings),
             f"[{color}]{r.status}[/{color}]",
             str(len(r.attempts)),
+            str(sum(a.steps for a in r.attempts)) or "-",
             f"${r.total_cost_usd:.4f}",
             f"{r.wall_time_s:.1f}s",
         )
     console.print(table)
     solved = sum(r.status == "verified" for r in receipts)
+    per_suite = {
+        s: {
+            "solved": sum(
+                r.status == "verified"
+                for c, r in zip(selected, receipts, strict=True)
+                if c.suite == s
+            ),
+            "total": sum(c.suite == s for c in selected),
+        }
+        for s in suites
+    }
     summary = {
-        "benchmark": "PipelineBench",
         "mode": settings.mode.value,
+        "strategy": settings.strategy,
         "solved": solved,
         "total": len(receipts),
         "solve_rate": solved / len(receipts),
+        "suites": per_suite,
         "total_cost_usd": budget.session.cost_usd,
-        "receipts": [r.run_id for r in receipts],
+        "cases": {c.name: r.run_id for c, r in zip(selected, receipts, strict=True)},
     }
     out = Path(settings.receipts_dir) / f"bench-{time.strftime('%Y%m%d-%H%M%S')}.json"
     out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -225,16 +270,17 @@ def bench(
     raise typer.Exit(0 if solved == len(receipts) else 1)
 
 
-async def _validate_all(selected: list[Path]) -> list[CaseValidation]:
+async def _validate_all(selected: list[Case]) -> list[CaseValidation]:
     sandbox = ContreeSandbox()
-    return list(await asyncio.gather(*(validate_case(sandbox, c) for c in selected)))
+    return list(await asyncio.gather(*(c.validate(sandbox) for c in selected)))
 
 
-async def _run_all(engine: Engine, selected: list[Path], settings: Settings) -> list[Receipt]:
+async def _run_all(engine: Engine, selected: list[Case], settings: Settings) -> list[Receipt]:
     receipts: list[Receipt] = []
     for case in selected:
-        console.print(f"[dim]running {case.name}...[/dim]")
-        receipt = await engine.fix(load_case(case))
+        engine.strategy = _strategy_for(case, settings)
+        console.print(f"[dim]running {case.suite}/{case.name} ({engine.strategy})...[/dim]")
+        receipt = await engine.fix(case.load())
         write_receipt(receipt, settings.receipts_dir)
         receipts.append(receipt)
     return receipts

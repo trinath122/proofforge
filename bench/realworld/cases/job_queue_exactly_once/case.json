@@ -1,0 +1,11 @@
+{
+  "title": "Billing worker pool double-charges, hides failures and hangs on shutdown",
+  "difficulty": "hard",
+  "tags": ["concurrency", "reliability", "idempotency", "retries", "shutdown"],
+  "issue": "Billing incident: `jobs.WorkerPool` runs our invoice-charging jobs. Customers were charged twice, jobs that failed every retry were reported as succeeded, and deploys hang because `shutdown()` never returns. Fix the pool so it meets its documented contract (also in `README.md`):\n\n- `WorkerPool(workers=4, max_attempts=3, backoff=None)`. `workers` and `max_attempts` must be >= 1, otherwise `ValueError`. `backoff(n)` returns seconds to wait before retry after the n-th failed attempt (n starts at 1); default is exponential starting at 0.05s.\n- `submit(job_id, fn) -> bool` is idempotent and thread-safe: the first submission of a `job_id` returns True; any later submission of the same id, even concurrent, returns False and never runs `fn`. After `shutdown()` has been called, `submit` raises `RuntimeError`.\n- A job is attempted until `fn()` returns (success) or it has raised an `Exception` `max_attempts` times. A job never runs concurrently with itself, and is never run again after it succeeds.\n- `results()` maps job id to return value for succeeded jobs only (a return value of `None` is still a success). `failures()` maps job id to a string containing the last exception's message, for jobs that used up all attempts. Both return copies. `attempts(job_id)` is the number of attempts made.\n- `shutdown(wait=True)` stops accepting jobs. With `wait=True` it returns only after every submitted job, including its retries, has finished and all workers have exited; it must return even if jobs raise. It returns True, and calling it again is safe.\n- Workers must run jobs in parallel.",
+  "protected": ["tests/*"],
+  "gates": [
+    {"name": "visible-tests", "command": "{python} -m unittest discover -s tests -t . -q", "timeout_s": 60},
+    {"name": "hidden-tests", "command": "{python} -m unittest discover -s hidden_tests -t . -q", "kind": "holdout", "timeout_s": 120}
+  ]
+}
