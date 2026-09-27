@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 from proofforge.gates.base import GateResult
 from proofforge.llm.base import Message
@@ -21,11 +22,37 @@ Rules:
 <entire new file content>
 ```"""
 
-_EDIT = re.compile(r"^### FILE:\s*(?P<path>\S+)\s*\n```[^\n]*\n(?P<body>.*?)\n```", re.M | re.S)
+# Reasoning models may wrap their thinking in <think> tags; an unclosed tag means the
+# reply was cut off while thinking, so everything after it is discarded.
+_THINK = re.compile(r"<think>.*?(?:</think>|\Z)", re.S)
+# Tolerates common variants: "### FILE: x", "**FILE: x**", "File: `x`".
+_EDIT = re.compile(
+    r"^[ \t]*(?:#{1,6}[ \t]*|\*\*)?FILE[ \t]*:?[ \t]*`?(?P<path>[\w./-]+)`?[ \t]*\**[ \t]*\n+"
+    r"[ \t]*```[^\n]*\n(?P<body>.*?)\n[ \t]*```",
+    re.M | re.S | re.I,
+)
+_FENCE = re.compile(r"```[^\n]*\n(?P<body>.*?)\n[ \t]*```", re.S)
 
 
-def parse_edits(text: str) -> dict[str, str]:
-    return {m["path"].removeprefix("./"): m["body"] + "\n" for m in _EDIT.finditer(text)}
+def strip_reasoning(text: str) -> str:
+    return _THINK.sub("", text)
+
+
+def parse_edits(text: str, editable: Iterable[str] = ()) -> dict[str, str]:
+    """Extract whole-file edits. Leniency is safe: nothing is accepted until gates pass.
+
+    If no labelled file block is found and exactly one file is editable, the last
+    fenced code block is taken as that file's new content.
+    """
+    text = strip_reasoning(text)
+    edits = {m["path"].removeprefix("./"): m["body"] + "\n" for m in _EDIT.finditer(text)}
+    if edits:
+        return edits
+    targets = list(editable)
+    blocks = _FENCE.findall(text)
+    if len(targets) == 1 and blocks:
+        return {targets[0]: blocks[-1] + "\n"}
+    return {}
 
 
 def _files_block(title: str, files: dict[str, str]) -> str:
@@ -63,6 +90,7 @@ def build_messages(
     protected: dict[str, str],
     results: list[GateResult],
     rejected: list[str],
+    notes: Iterable[str] = (),
 ) -> list[Message]:
     sections = [
         f"# Task\n{description}",
@@ -76,6 +104,7 @@ def build_messages(
             "Your previous edits to these files were rejected because they are not editable: "
             + ", ".join(sorted(rejected))
         )
+    sections.extend(f"## Note on your previous reply\n{n}" for n in notes)
     return [
         Message(role="system", content=SYSTEM),
         Message(role="user", content="\n\n".join(s for s in sections if s)),

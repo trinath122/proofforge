@@ -20,6 +20,7 @@ class Completion(BaseModel):
     prompt_tokens: int
     completion_tokens: int
     cost_usd: float
+    finish_reason: str | None = None
 
 
 class LLM(Protocol):

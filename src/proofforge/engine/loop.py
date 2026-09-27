@@ -12,7 +12,7 @@ import asyncio
 import difflib
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from proofforge.budget import BudgetExceededError, BudgetGuard
 from proofforge.engine.prompts import build_messages, parse_edits
@@ -36,6 +36,16 @@ class _State:
     files: dict[str, str]
     results: list[GateResult]
     rejected: list[str]
+    notes: list[str] = field(default_factory=list)
+
+
+def _format_note(attempts: list[Attempt]) -> str:
+    truncated = any(a.finish_reason == "length" for a in attempts)
+    cause = " It was cut off at the output limit." if truncated else ""
+    return (
+        "It contained no file edit that could be applied." + cause + " Keep reasoning brief and "
+        "reply with the complete new file content in the required `### FILE:` format."
+    )
 
 
 def unified_diff(before: dict[str, str], after: dict[str, str]) -> str:
@@ -144,6 +154,8 @@ class Engine:
                     state = best
                 else:
                     state.rejected = sorted({p for a, _ in outcomes for p in a.rejected_edits})
+                    failed = [a for a, _ in outcomes if a.error]
+                    state.notes = [_format_note(failed)] if failed else []
         except BudgetExceededError as exc:
             return receipt(
                 "budget_exceeded",
@@ -177,10 +189,11 @@ class Engine:
             protected=task.protected,
             results=state.results,
             rejected=state.rejected,
+            notes=state.notes,
         )
         temperature = 0.2 if branch == 0 else min(0.2 + 0.25 * branch, 1.0)
         completion = await self.llm.complete(role, messages, temperature=temperature)
-        edits = parse_edits(completion.text)
+        edits = parse_edits(completion.text, task.editable)
         allowed = {p: c for p, c in edits.items() if p in task.editable}
         rejected = sorted(p for p in edits if p not in task.editable)
         attempt = Attempt(
@@ -191,9 +204,13 @@ class Engine:
             edited_files=sorted(allowed),
             rejected_edits=rejected,
             cost_usd=completion.cost_usd,
+            finish_reason=completion.finish_reason,
         )
         if not allowed:
-            attempt.error = "no valid edits in model output"
+            attempt.error = "no applicable file edit in reply"
+            if completion.finish_reason == "length":
+                attempt.error += " (cut off at output limit)"
+            attempt.response_excerpt = completion.text[-2000:]
             return attempt, None
 
         applied = await self.sandbox.run(

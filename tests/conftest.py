@@ -57,10 +57,12 @@ class ScriptedLLM:
         responses: list[str] | Callable[[Role, list[Message], float], str],
         budget: BudgetGuard,
         tokens: tuple[int, int] = (1000, 200),
+        finish_reasons: list[str] | None = None,
     ) -> None:
         self._responses = responses
         self._budget = budget
         self._tokens = tokens
+        self._finish = finish_reasons or []
         self.calls: list[tuple[Role, list[Message], float]] = []
 
     async def complete(
@@ -74,8 +76,10 @@ class ScriptedLLM:
             text = self._responses[len(self.calls) - 1]
         spec = MODELS["lightning"]
         cost = self._budget.charge(spec, *self._tokens)
+        n = len(self.calls) - 1
         return Completion(
             text=text,
+            finish_reason=self._finish[n] if n < len(self._finish) else "stop",
             model_key=spec.key,
             prompt_tokens=self._tokens[0],
             completion_tokens=self._tokens[1],

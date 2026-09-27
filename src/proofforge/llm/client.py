@@ -14,6 +14,9 @@ from proofforge.models.registry import (
     model_for,
 )
 
+# Room for reasoning plus a full file; reasoning models truncate silently without it.
+MAX_OUTPUT_TOKENS = 16_384
+
 
 class TokenFactoryLLM:
     def __init__(self, api_key: str, mode: Mode, budget: BudgetGuard) -> None:
@@ -38,6 +41,7 @@ class TokenFactoryLLM:
             model=spec.model_id,
             messages=[{"role": m.role, "content": m.content} for m in messages],  # type: ignore[misc]
             temperature=temperature,
+            max_tokens=MAX_OUTPUT_TOKENS,
         )
         usage = response.usage
         prompt = usage.prompt_tokens if usage else 0
@@ -45,6 +49,7 @@ class TokenFactoryLLM:
         cost = self._budget.charge(spec, prompt, completion)
         return Completion(
             text=response.choices[0].message.content or "",
+            finish_reason=response.choices[0].finish_reason,
             model_key=spec.key,
             prompt_tokens=prompt,
             completion_tokens=completion,

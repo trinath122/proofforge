@@ -31,6 +31,8 @@ class Attempt(BaseModel):
     gates: list[GateResult] = Field(default_factory=list)
     cost_usd: float = 0.0
     error: str | None = None
+    finish_reason: str | None = None
+    response_excerpt: str = Field(default="", description="tail of the raw model reply")
 
     @property
     def visible_passed(self) -> int:

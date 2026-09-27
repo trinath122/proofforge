@@ -6,6 +6,7 @@ from proofforge.engine.loop import Engine, unified_diff
 from proofforge.engine.task import FixTask
 from proofforge.llm.base import Message
 from proofforge.models.registry import Mode, Role
+from proofforge.receipts import render_markdown
 from proofforge.sandbox.local import LocalSandbox
 from tests.conftest import CHEAT_FIX, EDIT_TEST_FILE, GOOD_FIX, ScriptedLLM
 
@@ -56,7 +57,7 @@ async def test_edit_to_frozen_test_is_rejected(
 
     assert receipt.status == "verified"
     assert receipt.attempts[0].rejected_edits == ["test_stats.py"]
-    assert receipt.attempts[0].error == "no valid edits in model output"
+    assert receipt.attempts[0].error == "no applicable file edit in reply"
     assert "rejected because they are not editable: test_stats.py" in llm.calls[1][1][-1].content
 
 
@@ -131,3 +132,24 @@ def test_unified_diff_only_changed_files() -> None:
 
 def test_visible_test_fixture_is_the_frozen_one(task: FixTask) -> None:
     assert task.protected["test_stats.py"] == VISIBLE_TEST
+
+
+async def test_unusable_reply_is_explained_to_the_model(
+    sandbox: LocalSandbox, budget: BudgetGuard, task: FixTask
+) -> None:
+    llm = ScriptedLLM(
+        ["<think>The median should sort the values and", GOOD_FIX],
+        budget,
+        finish_reasons=["length", "stop"],
+    )
+    receipt = await make_engine(sandbox, llm, budget).fix(task)
+
+    assert receipt.status == "verified"
+    first = receipt.attempts[0]
+    assert first.error == "no applicable file edit in reply (cut off at output limit)"
+    assert first.finish_reason == "length"
+    assert "median should sort" in first.response_excerpt
+    retry_prompt = llm.calls[1][1][-1].content
+    assert "Note on your previous reply" in retry_prompt
+    assert "cut off at the output limit" in retry_prompt
+    assert "Unusable model replies" in render_markdown(receipt)

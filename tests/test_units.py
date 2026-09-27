@@ -189,3 +189,24 @@ async def test_local_sandbox_branches_are_independent(tmp_path: Path) -> None:
     assert (await sb.read(v1.checkpoint, "state.txt")).strip() == b"v1"
     timeout = await sb.run(v1.checkpoint, py("import time; time.sleep(3)"), timeout_s=1, keep=False)
     assert timeout.exit_code != 0
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "**FILE: stats.py**\n```python\nX = 1\n```",
+        "File: `stats.py`\n\n```\nX = 1\n```",
+        "## file: ./stats.py\n```py\nX = 1\n```",
+        "Here is the fix:\n```python\nX = 0\n```\nFinal version:\n```python\nX = 1\n```",
+        "<think>maybe ```python\nX = 9\n```</think>\n```python\nX = 1\n```",
+    ],
+)
+def test_parse_edits_tolerates_formats(reply: str) -> None:
+    assert parse_edits(reply, ["stats.py"]) == {"stats.py": "X = 1\n"}
+
+
+def test_parse_edits_refuses_ambiguous_or_truncated_replies() -> None:
+    plain = "```python\nX = 1\n```"
+    assert parse_edits(plain, ["a.py", "b.py"]) == {}  # which file? refuse to guess
+    assert parse_edits("<think>long reasoning ```x\n1\n```", ["a.py"]) == {}
+    assert parse_edits("no code at all", ["a.py"]) == {}

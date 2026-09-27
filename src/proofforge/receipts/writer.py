@@ -27,11 +27,23 @@ def render_markdown(r: Receipt) -> str:
     lines += ["| --- | --- | --- | --- | --- | --- |"]
     for a in r.attempts:
         visible = sum(1 for g in a.gates if g.kind == "visible")
-        tamper = ", ".join(a.tampered_files + a.rejected_edits) or "-"
+        tamper = ", ".join(a.tampered_files + a.rejected_edits) or a.error or "-"
         lines.append(
             f"| {a.round} | {a.branch} | {a.model_key} | {a.visible_passed}/{visible} "
             f"| {tamper} | ${a.cost_usd:.4f} |"
         )
+    failed_replies = [a for a in r.attempts if a.error and a.response_excerpt]
+    if failed_replies:
+        lines += ["", "## Unusable model replies (tail)", ""]
+        for a in failed_replies:
+            lines += [
+                f"**Round {a.round}, branch {a.branch}** (finish: {a.finish_reason or '?'})",
+                "",
+                "```text",
+                a.response_excerpt[-600:].rstrip(),
+                "```",
+                "",
+            ]
     if r.final_gates:
         lines += ["", "## Final gates (visible + hidden holdout)", ""]
         lines += [f"- {_ICON[g.passed]} `{g.name}` [{g.kind}]" for g in r.final_gates]
