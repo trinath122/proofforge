@@ -31,12 +31,23 @@ Reproduce  ->  Change  ->  Verify with proof  ->  Repeat until every gate passes
 
 | Key | Model | Default role |
 | --- | --- | --- |
-| `ultra` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Planner in `max` mode |
-| `super` | `nvidia/nemotron-3-super-120b-a12b` | Coder in `efficient` and `max` modes |
-| `lightning` | `nvidia/Nemotron-3_5-Lightning` | Everything in `dev` mode; fixer loops |
+| `ultra` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Planner and retry fixer in `max` mode |
+| `super` | `nvidia/nemotron-3-super-120b-a12b` | Coder and retry fixer in `efficient`; coder in `max` |
+| `lightning` | `nvidia/Nemotron-3_5-Lightning` | Everything in `dev` mode; routing and monitoring |
 | `nano` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Fallback |
 
-Routing lives in [`src/proofforge/models/registry.py`](src/proofforge/models/registry.py). `dev` mode uses Lightning only, which keeps development runs at fractions of a cent.
+Retries escalate and never downgrade: a retry only happens after a proof (usually the hidden holdout) rejected a change, so it gets an equal or larger model. Routing lives in [`src/proofforge/models/registry.py`](src/proofforge/models/registry.py). `dev` mode uses Lightning only, which keeps development runs at fractions of a cent.
+
+## Results
+
+RealWorld suite (hard multi-file cases: concurrency, reliability), tool-using agent, real Nebius sandboxes:
+
+| Mode | Models | Solved | Cost | Wall time |
+| --- | --- | --- | --- | --- |
+| `dev` | Lightning only | 1/2 | $0.19 | 1,168s |
+| `efficient` | Super codes, Lightning assists | **2/2** | **$0.11** | **381s** |
+
+The larger model was cheaper *and* 3x faster: it needed 81 agent steps where Lightning used 169. In the rate-limiter run, Super's first attempt passed every visible test and was rejected by the hidden holdout; the verified fix came on retry. That rejection is the point of ProofForge.
 
 ## Quickstart
 

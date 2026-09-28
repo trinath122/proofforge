@@ -43,6 +43,20 @@ class Attempt(BaseModel):
     def visible_passed(self) -> int:
         return sum(g.passed for g in self.gates if g.kind == "visible")
 
+    def score(self, kind: str) -> str:
+        """`passed/total` for one gate kind, or `-` when none ran."""
+        gates = [g for g in self.gates if g.kind == kind]
+        return f"{sum(g.passed for g in gates)}/{len(gates)}" if gates else "-"
+
+    @property
+    def flags(self) -> str:
+        """Integrity events and notes for this attempt, one readable string."""
+        parts = [f"tampered: {f}" for f in self.tampered_files]
+        parts += [f"rejected edit: {f}" for f in self.rejected_edits]
+        if self.error:
+            parts.append(self.error)
+        return "; ".join(parts) or "-"
+
     @property
     def all_passed(self) -> bool:
         return bool(self.gates) and all(g.passed for g in self.gates) and not self.tampered_files

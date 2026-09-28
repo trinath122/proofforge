@@ -42,6 +42,12 @@ def test_dev_mode_is_lightning_only() -> None:
     assert model_for(Role.PLANNER, Mode.MAX).key == "ultra"
 
 
+@pytest.mark.parametrize("mode", list(Mode))
+def test_retries_escalate_never_downgrade(mode: Mode) -> None:
+    rank = {"nano": 0, "lightning": 1, "super": 2, "ultra": 3}
+    assert rank[model_for(Role.FIXER, mode).key] >= rank[model_for(Role.CODER, mode).key]
+
+
 def test_budget_caps() -> None:
     guard = BudgetGuard(task_cap_usd=0.001, session_cap_usd=0.01)
     guard.ensure_headroom()
@@ -159,7 +165,19 @@ def test_receipt_roundtrip(tmp_path: Path) -> None:
     md = render_markdown(receipt)
     assert "PASS `v` [visible]" in md
     assert "```diff" in md
+    assert "| 1 | 0 | lightning | - | 1/1 | - | - |" in md
     assert (tmp_path / "r1.md").exists()
+
+    caught = receipt.attempts[0].model_copy(
+        update={
+            "gates": [gate, gate.model_copy(update={"kind": "holdout", "passed": False})],
+            "steps": 30,
+            "error": "step limit 30 reached",
+            "tampered_files": ["t.py"],
+        }
+    )
+    row = render_markdown(receipt.model_copy(update={"attempts": [caught]}))
+    assert "| 30 | 1/1 | 0/1 | tampered: t.py; step limit 30 reached |" in row
 
 
 def test_key_fallback_from_contree_profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

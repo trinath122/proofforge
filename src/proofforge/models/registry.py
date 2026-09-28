@@ -88,13 +88,16 @@ class Mode(StrEnum):
     MAX = "max"
 
 
+# Retries escalate, never downgrade: a fixer round only happens after a stronger proof
+# (usually the hidden holdout) rejected the coder's change, so it gets an equal or
+# larger model. Ultra is called only when Super has already failed.
 ROUTING: dict[Mode, dict[Role, str]] = {
     Mode.DEV: {role: "lightning" for role in Role},
     Mode.EFFICIENT: {
         Role.PLANNER: "super",
         Role.ROUTER: "lightning",
         Role.CODER: "super",
-        Role.FIXER: "lightning",
+        Role.FIXER: "super",
         Role.BREAKER: "lightning",
         Role.MONITOR: "lightning",
     },
@@ -102,7 +105,7 @@ ROUTING: dict[Mode, dict[Role, str]] = {
         Role.PLANNER: "ultra",
         Role.ROUTER: "super",
         Role.CODER: "super",
-        Role.FIXER: "super",
+        Role.FIXER: "ultra",
         Role.BREAKER: "super",
         Role.MONITOR: "super",
     },

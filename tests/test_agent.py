@@ -109,7 +109,7 @@ async def test_tampering_through_shell_is_caught_and_explained(
     assert "modified by your commands" in llm.calls[3][1][-1].content
     assert second.all_passed
     assert receipt.status == "verified"
-    assert "Tamper" in render_markdown(receipt)
+    assert "tampered: test_stats.py" in render_markdown(receipt)
 
 
 async def test_step_limit_without_changes(

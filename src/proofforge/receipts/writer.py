@@ -23,14 +23,17 @@ def render_markdown(r: Receipt) -> str:
         "",
     ]
     lines += [f"- {_ICON[g.passed]} `{g.name}` (exit {g.exit_code})" for g in r.reproduction]
-    lines += ["", "## Attempts", "", "| Round | Branch | Model | Visible passed | Tamper | Cost |"]
-    lines += ["| --- | --- | --- | --- | --- | --- |"]
+    lines += [
+        "",
+        "## Attempts",
+        "",
+        "| Round | Branch | Model | Steps | Visible | Hidden holdout | Flags | Cost |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
     for a in r.attempts:
-        visible = sum(1 for g in a.gates if g.kind == "visible")
-        tamper = ", ".join(a.tampered_files + a.rejected_edits) or a.error or "-"
         lines.append(
-            f"| {a.round} | {a.branch} | {a.model_key} | {a.visible_passed}/{visible} "
-            f"| {tamper} | ${a.cost_usd:.4f} |"
+            f"| {a.round} | {a.branch} | {a.model_key} | {a.steps or '-'} | {a.score('visible')} "
+            f"| {a.score('holdout')} | {a.flags} | ${a.cost_usd:.4f} |"
         )
     failed_replies = [a for a in r.attempts if a.error and a.response_excerpt]
     if failed_replies:

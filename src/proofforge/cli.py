@@ -67,17 +67,16 @@ def _report(receipt: Receipt, settings: Settings) -> None:
     path = write_receipt(receipt, settings.receipts_dir)
     color = "green" if receipt.status == "verified" else "yellow"
     console.print(f"\n[bold {color}]{receipt.status.upper()}[/bold {color}]  {receipt.task_title}")
-    table = Table("Round", "Branch", "Model", "Visible", "Holdout", "Flags", "Cost")
+    table = Table("Round", "Branch", "Model", "Steps", "Visible", "Holdout", "Flags", "Cost")
     for a in receipt.attempts:
-        vis = [g for g in a.gates if g.kind == "visible"]
-        hold = [g for g in a.gates if g.kind == "holdout"]
         table.add_row(
             str(a.round),
             str(a.branch),
             a.model_key,
-            f"{sum(g.passed for g in vis)}/{len(vis)}",
-            f"{sum(g.passed for g in hold)}/{len(hold)}",
-            ", ".join(a.tampered_files + a.rejected_edits) or a.error or "-",
+            str(a.steps or "-"),
+            a.score("visible"),
+            a.score("holdout"),
+            a.flags,
             f"${a.cost_usd:.4f}",
         )
     console.print(table)
