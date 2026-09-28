@@ -123,7 +123,9 @@ Rules:
 - Frozen verification files (listed below) cannot be changed; attempts are refused and logged.
 - Hidden checks you cannot see will also run. Fix the real behavior; never special-case \
 inputs, hard-code expected outputs, or weaken error handling to make checks pass.
-- Keep reasoning brief and act through tools. Command output is truncated; narrow it down."""
+- Keep reasoning brief and act through tools. Command output is truncated; narrow it down.
+- Commands time out after 60s. A timeout means the code hangs (deadlock, missed wakeup, \
+a loop that never exits): read the code or run one narrower test, never re-run blindly."""
 
 
 def build_agent_messages(

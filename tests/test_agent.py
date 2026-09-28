@@ -26,7 +26,7 @@ TEST_CMD = f"{PY} test_stats.py"
 
 
 def agent(sandbox: LocalSandbox, llm: ScriptedLLM, budget: BudgetGuard, **kw: int) -> Engine:
-    return Engine(sandbox, llm, budget, mode=Mode.DEV, strategy="agent", **kw)
+    return Engine(sandbox, llm, budget, mode=Mode.DEV, strategy="agent", python=PY, **kw)
 
 
 async def test_agent_explores_fixes_and_submits(
@@ -158,7 +158,7 @@ def test_tool_specs_are_well_formed() -> None:
 async def test_workspace_tool_errors(sandbox: LocalSandbox) -> None:
     base = await sandbox.base("x")
     seeded = await sandbox.run(base, NOOP, files={workspace_path("a.py"): b"x = 1\nx = 1\ny = 2\n"})
-    ws = Workspace(sandbox, seeded.checkpoint, protected={"t.py"})
+    ws = Workspace(sandbox, seeded.checkpoint, protected={"t.py"}, python=PY)
 
     assert (await ws.call("nope", "{}"))[0].startswith("ERROR: unknown tool")
     assert (await ws.call("read_file", "not json"))[0].startswith("ERROR: could not parse")
@@ -178,3 +178,39 @@ async def test_workspace_tool_errors(sandbox: LocalSandbox) -> None:
     assert "a.py:3" in found[0]
     assert (await ws.call("search", json.dumps({"pattern": "zzz"})))[0] == "(no matches)"
     assert ws.touched == set()
+
+
+async def test_list_and_search_are_portable(sandbox: LocalSandbox) -> None:
+    base = await sandbox.base("x")
+    files = {
+        "top.py": b"import os\n",
+        "pkg/mod.py": b"def handler():\n    return 1\n",
+        "pkg/deep/er/leaf.py": b"handler = None\n",
+        "pkg/__pycache__/mod.cpython-312.pyc": b"\x00",
+        "data.bin": b"\xff\xfe handler",
+    }
+    seeded = await sandbox.run(base, NOOP, files={workspace_path(k): v for k, v in files.items()})
+    ws = Workspace(sandbox, seeded.checkpoint, protected=set(), python=PY)
+
+    listed = (await ws.call("list_files", "{}"))[0].splitlines()
+    assert listed == ["data.bin", "pkg/mod.py", "top.py"]  # depth 3 stops before leaf.py
+    deep = (await ws.call("list_files", json.dumps({"path": "pkg", "max_depth": 6})))[0]
+    assert deep.splitlines() == ["pkg/deep/er/leaf.py", "pkg/mod.py"]
+    assert ".pf_tool" not in deep
+
+    hits = (await ws.call("search", json.dumps({"pattern": r"^def \w+\("})))[0]
+    assert hits == "pkg/mod.py:1:def handler():"
+    scoped = (await ws.call("search", json.dumps({"pattern": "handler", "path": "pkg/deep"})))[0]
+    assert scoped == "pkg/deep/er/leaf.py:1:handler = None"
+    bad = (await ws.call("search", json.dumps({"pattern": "("})))[0]
+    assert bad.startswith("ERROR: invalid regular expression")
+
+
+async def test_run_timeout_explains_hang(sandbox: LocalSandbox) -> None:
+    base = await sandbox.base("x")
+    ws = Workspace(sandbox, base, protected=set(), python=PY)
+    hang = f'{PY} -c "import time; time.sleep(5)"'
+    out, _ = await ws.call("run", json.dumps({"command": hang, "timeout_s": 1}))
+    assert "hit the 1s timeout" in out
+    quick, _ = await ws.call("run", json.dumps({"command": f'{PY} -c "print(7)"'}))
+    assert "timeout" not in quick

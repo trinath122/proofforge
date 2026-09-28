@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import posixpath
-import shlex
 from typing import Any
 
 from proofforge.gates.base import workspace_path
@@ -17,6 +16,60 @@ from proofforge.sandbox.base import NOOP, Checkpoint, Sandbox
 
 OUTPUT_LIMIT = 6000
 READ_LINE_LIMIT = 400
+RUN_TIMEOUT_S = 60
+RUN_TIMEOUT_MAX_S = 300
+
+# list_files and search run this helper inside the sandbox instead of find/grep, so they
+# behave the same on every image and on the local test sandbox (including Windows).
+# Arguments travel in a JSON file, which avoids shell quoting differences entirely.
+HELPER = ".pf_tool.py"
+HELPER_ARGS = ".pf_tool_args.json"
+_HELPER_SRC = r"""
+import json, os, re, sys
+
+SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules"}
+SKIP = {".pf_tool.py", ".pf_tool_args.json"}
+a = json.load(open(".pf_tool_args.json"))
+root = a["path"]
+
+
+def walk():
+    if os.path.isfile(root):
+        yield root
+        return
+    limit = a.get("max_depth") or 99
+    for d, dirs, files in os.walk(root):
+        rel = os.path.relpath(d, root)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        dirs[:] = sorted(x for x in dirs if x not in SKIP_DIRS) if depth + 1 < limit else []
+        for f in sorted(files):
+            if f in SKIP or f.endswith(".pyc"):
+                continue
+            p = os.path.join(d, f).replace(os.sep, "/")
+            yield p[2:] if p.startswith("./") else p
+
+
+out = []
+if a["op"] == "list":
+    out = sorted(walk())[:400]
+else:
+    try:
+        rx = re.compile(a["pattern"])
+    except re.error as e:
+        print("ERROR: invalid regular expression: %s" % e)
+        sys.exit(0)
+    for p in walk():
+        try:
+            with open(p, encoding="utf-8", errors="strict") as fh:
+                for i, line in enumerate(fh, 1):
+                    if rx.search(line):
+                        out.append("%s:%d:%s" % (p, i, line.rstrip("\n")[:300]))
+        except (UnicodeDecodeError, OSError):
+            continue
+        if len(out) >= 200:
+            break
+sys.stdout.write("\n".join(out[:200 if a["op"] == "search" else 400]))
+"""
 
 
 def _fn(name: str, description: str, props: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -48,14 +101,15 @@ TOOL_SPECS: list[dict[str, Any]] = [
     ),
     _fn(
         "search",
-        "Search file contents with an extended regular expression (grep -rnE).",
+        "Search file contents with a Python regular expression. Returns path:line:text.",
         {"pattern": _STR, "path": _STR},
         ["pattern"],
     ),
     _fn(
         "run",
         "Run a shell command in the workspace (e.g. tests, scripts, sqlite3 queries). "
-        "Changes to the filesystem persist.",
+        f"Changes to the filesystem persist. Times out after {RUN_TIMEOUT_S}s unless "
+        f"timeout_s is given (max {RUN_TIMEOUT_MAX_S}).",
         {"command": _STR, "timeout_s": _INT},
         ["command"],
     ),
@@ -105,8 +159,16 @@ def normalize(path: str) -> str:
 class Workspace:
     """The agent's view of one sandbox branch. Tracks what it changed."""
 
-    def __init__(self, sandbox: Sandbox, checkpoint: Checkpoint, protected: set[str]) -> None:
+    def __init__(
+        self,
+        sandbox: Sandbox,
+        checkpoint: Checkpoint,
+        protected: set[str],
+        *,
+        python: str = "python3",
+    ) -> None:
         self.sandbox = sandbox
+        self.python = python
         self.checkpoint = checkpoint
         self.protected = protected
         self.touched: set[str] = set()
@@ -132,21 +194,34 @@ class Workspace:
             return f"ERROR: bad arguments for {name}: {exc}", False
         return result
 
-    async def _exec(self, command: str, *, keep: bool, timeout_s: int = 120) -> tuple[int, str]:
+    async def _exec(
+        self, command: str, *, keep: bool, timeout_s: int = RUN_TIMEOUT_S
+    ) -> tuple[int, str, bool]:
         res = await self.sandbox.run(self.checkpoint, command, keep=keep, timeout_s=timeout_s)
         if keep:
             self.checkpoint = res.checkpoint
         out = res.stdout + (f"\n[stderr]\n{res.stderr}" if res.stderr.strip() else "")
-        return res.exit_code, out
+        timed_out = res.exit_code == 124 or res.elapsed_s >= timeout_s - 0.5
+        return res.exit_code, out, timed_out
+
+    async def _helper(self, **args: object) -> str:
+        res = await self.sandbox.run(
+            self.checkpoint,
+            f"{self.python} {HELPER}",
+            files={
+                workspace_path(HELPER): _HELPER_SRC.encode(),
+                workspace_path(HELPER_ARGS): json.dumps(args).encode(),
+            },
+            keep=False,
+            timeout_s=RUN_TIMEOUT_S,
+        )
+        if res.exit_code != 0:
+            return f"ERROR: tool failed (exit {res.exit_code}): {res.stderr.strip()[-500:]}"
+        return res.stdout.strip()
 
     async def _tool_list_files(self, path: str = ".", max_depth: int = 3) -> tuple[str, bool]:
-        target = normalize(path)
         depth = max(1, min(int(max_depth), 6))
-        cmd = (
-            f"find {shlex.quote(target)} -maxdepth {depth} -type f "
-            "-not -path '*/.git/*' -not -name '*.pyc' | sort | head -400"
-        )
-        _, out = await self._exec(cmd, keep=False)
+        out = await self._helper(op="list", path=normalize(path), max_depth=depth)
         return _clip(out) or "(no files)", False
 
     async def _tool_read_file(
@@ -168,18 +243,20 @@ class Workspace:
         return _clip(f"{rel} ({len(lines)} lines)\n{body}{more}"), False
 
     async def _tool_search(self, pattern: str, path: str = ".") -> tuple[str, bool]:
-        target = normalize(path)
-        cmd = (
-            f"grep -rnE --exclude-dir=.git -- {shlex.quote(pattern)} {shlex.quote(target)} "
-            "| head -200"
-        )
-        _, out = await self._exec(cmd, keep=False)
+        out = await self._helper(op="search", pattern=pattern, path=normalize(path))
         return _clip(out) or "(no matches)", False
 
-    async def _tool_run(self, command: str, timeout_s: int = 120) -> tuple[str, bool]:
-        timeout = max(1, min(int(timeout_s), 600))
-        code, out = await self._exec(command, keep=True, timeout_s=timeout)
-        return _clip(f"exit code {code}\n{out}"), False
+    async def _tool_run(self, command: str, timeout_s: int = RUN_TIMEOUT_S) -> tuple[str, bool]:
+        timeout = max(1, min(int(timeout_s), RUN_TIMEOUT_MAX_S))
+        code, out, timed_out = await self._exec(command, keep=True, timeout_s=timeout)
+        note = (
+            f"\nNOTE: the command hit the {timeout}s timeout. That usually means the code "
+            "under test hangs (deadlock, missed wakeup, a loop that never exits). Read the "
+            "code or run a narrower test instead of re-running the same command."
+            if timed_out
+            else ""
+        )
+        return _clip(f"exit code {code}\n{out}") + note, False
 
     async def _write(self, rel: str, content: str) -> tuple[str, bool]:
         if rel in self.protected:

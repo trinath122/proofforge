@@ -97,6 +97,7 @@ class Engine:
         branch_width: int = 1,
         strategy: Strategy = "rewrite",
         max_steps: int = 30,
+        python: str = "python3",
     ) -> None:
         self.sandbox = sandbox
         self.llm = llm
@@ -106,6 +107,7 @@ class Engine:
         self.branch_width = branch_width
         self.strategy = strategy
         self.max_steps = max_steps
+        self.python = python  # interpreter inside the sandbox, used by the agent's tools
 
     async def fix(self, task: FixTask) -> Receipt:
         started = time.monotonic()
@@ -275,7 +277,9 @@ class Engine:
         role: Role,
     ) -> tuple[Attempt, _State | None]:
         """One agent episode: explore, run, edit and submit, all inside the sandbox."""
-        ws = Workspace(self.sandbox, state.checkpoint, protected=set(task.protected))
+        ws = Workspace(
+            self.sandbox, state.checkpoint, protected=set(task.protected), python=self.python
+        )
         messages: list[Message] = build_agent_messages(
             task.description,
             files=sorted(set(task.editable) | set(task.context) | set(task.protected)),
