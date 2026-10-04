@@ -127,3 +127,13 @@ async def test_agent_fixes_in_image_repo_end_to_end(tmp_path: Path) -> None:
     assert "+    return a + b" in receipt.diff
     assert "-    return a - b" in receipt.diff
     assert ".pf_tool" not in receipt.diff
+
+
+def test_loader_keeps_crlf_in_test_data(tmp_path: Path) -> None:
+    task = tmp_path / "t"
+    shutil.copytree(TASK, task)
+    (task / "tests" / "fixture.patch").write_bytes(b"+--boundary\r\n+Content-Type: text/plain\r\n")
+    (task / "tests" / "test.sh").write_bytes(b"#!/bin/bash\r\necho ok\r\n")
+    holdout = harbor.load_task(task).holdout
+    assert holdout["/tests/fixture.patch"] == "+--boundary\r\n+Content-Type: text/plain\r\n"
+    assert holdout["/tests/test.sh"] == "#!/bin/bash\necho ok\n", "shell scripts are normalized"

@@ -55,7 +55,9 @@ def _texts(root: Path, mount: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for p in sorted(root.rglob("*")):
         if p.is_file():
-            text = p.read_text(encoding="utf-8")
+            # Byte-exact: test patches can carry CRLF fixtures (e.g. HTTP multipart bodies),
+            # which read_text() would silently rewrite.
+            text = p.read_bytes().decode("utf-8")
             if p.suffix == ".sh":
                 text = text.replace("\r\n", "\n")  # tolerate Windows checkouts
             out[f"{mount}/{p.relative_to(root).as_posix()}"] = text
