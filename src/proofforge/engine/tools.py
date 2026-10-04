@@ -193,6 +193,7 @@ class Workspace:
         self.checkpoint = checkpoint
         self.protected = protected
         self.touched: set[str] = set()
+        self.writes = 0  # successful file writes so far; lets callers notice progress
         self.refused: list[str] = []
         self.summary = ""
 
@@ -298,6 +299,7 @@ class Workspace:
         )
         self.checkpoint = res.checkpoint
         self.touched.add(rel)
+        self.writes += 1
         return f"wrote {rel} ({len(content.splitlines())} lines)", False
 
     async def _tool_write_file(self, path: str, content: str) -> tuple[str, bool]:

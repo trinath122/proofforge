@@ -26,7 +26,7 @@ def test_short_conversations_are_untouched() -> None:
 
 
 def test_older_output_and_file_bodies_are_masked() -> None:
-    msgs = _conversation(20)
+    msgs = _conversation(40)
     out = compact(msgs)
     assert len(out) == len(msgs)
     assert out[:2] == msgs[:2], "system prompt and task are never masked"
@@ -56,3 +56,38 @@ def test_malformed_arguments_are_left_alone() -> None:
         role="assistant", tool_calls=[ToolCall(id="c0", name="run", arguments="[1, 2]")]
     )
     assert compact(msgs)[2] == msgs[2]
+
+
+def _read(i: int, path: str, body: str) -> list[Message]:
+    args = json.dumps({"path": path})
+    return [
+        Message(
+            role="assistant", tool_calls=[ToolCall(id=f"r{i}", name="read_file", arguments=args)]
+        ),
+        Message(role="tool", tool_call_id=f"r{i}", content=body),
+    ]
+
+
+def test_latest_read_of_each_file_stays_visible() -> None:
+    msgs = [Message(role="system", content="S"), Message(role="user", content="U")]
+    msgs += _read(0, "/app/a.py", "A-old " + "a" * 2000)
+    msgs += _read(1, "a.py", "A-new " + "a" * 2000)
+    msgs += _read(2, "b.py", "B " + "b" * 2000)
+    msgs += _read(3, "c.py", "C " + "c" * 2000)
+    edit = json.dumps({"path": "c.py", "content": "x"})
+    msgs.append(
+        Message(role="assistant", tool_calls=[ToolCall(id="w", name="write_file", arguments=edit)])
+    )
+    msgs.append(Message(role="tool", tool_call_id="w", content="wrote c.py"))
+    for i in range(KEEP_RECENT):
+        msgs.append(
+            Message(
+                role="assistant", tool_calls=[ToolCall(id=f"s{i}", name="search", arguments="{}")]
+            )
+        )
+        msgs.append(Message(role="tool", tool_call_id=f"s{i}", content="hit " + "s" * 2000))
+    contents = [m.content for m in compact(msgs) if m.role == "tool"]
+    assert any(c.startswith("A-new") and "elided" not in c for c in contents)
+    assert any(c.startswith("A-old") and "elided" in c for c in contents), "stale read masked"
+    assert any(c.startswith("B ") and "elided" not in c for c in contents)
+    assert any(c.startswith("C ") and "elided" in c for c in contents), "edited since: masked"

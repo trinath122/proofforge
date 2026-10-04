@@ -5,7 +5,8 @@ import json
 import pytest
 
 from proofforge.budget import BudgetGuard
-from proofforge.engine.loop import STEP_WARNING, Engine
+from proofforge.engine.coach import STEP_WARNING
+from proofforge.engine.loop import Engine
 from proofforge.engine.task import FixTask
 from proofforge.engine.tools import TOOL_SPECS, PathError, Workspace, normalize
 from proofforge.gates.base import workspace_path

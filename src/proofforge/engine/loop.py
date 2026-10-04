@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from proofforge.budget import BudgetExceededError, BudgetGuard
+from proofforge.engine.coach import Coach
 from proofforge.engine.context import compact
 from proofforge.engine.prompts import build_agent_messages, build_messages, parse_edits
 from proofforge.engine.spec import parse_interfaces
@@ -291,6 +292,58 @@ class Engine:
             notes.append(_agent_note(failed) if self.strategy == "agent" else _format_note(failed))
         return notes
 
+    async def _episode(
+        self,
+        task: FixTask,
+        ws: Workspace,
+        messages: list[Message],
+        attempt: Attempt,
+        *,
+        role: Role,
+        temperature: float,
+    ) -> bool:
+        """Run tool-calling steps until submit or the step limit. Returns whether submitted."""
+        coach = Coach(self.max_steps)
+        for step in range(self.max_steps):
+            if note := coach.before_step(step):
+                messages.append(Message(role="user", content=note))
+            completion = await self.llm.complete(
+                role, compact(messages), temperature=temperature, tools=TOOL_SPECS
+            )
+            attempt.model_key = completion.model_key
+            attempt.cost_usd += completion.cost_usd
+            attempt.prompt_tokens += completion.prompt_tokens
+            attempt.completion_tokens += completion.completion_tokens
+            attempt.finish_reason = completion.finish_reason
+            attempt.steps += 1
+            messages.append(
+                Message(role="assistant", content=completion.text, tool_calls=completion.tool_calls)
+            )
+            if not completion.tool_calls:
+                # No tool use: accept whole-file blocks in plain text, then stop.
+                for path, content in parse_edits(completion.text, task.editable).items():
+                    await ws.call("write_file", _json(path, content))
+                attempt.response_excerpt = completion.text[-2000:]
+                return False
+            submitted = False
+            for call in completion.tool_calls:
+                before = ws.writes
+                observation, done = await ws.call(call.name, call.arguments)
+                observation = coach.observe(
+                    step,
+                    (call.name, call.arguments),
+                    writes_before=before,
+                    writes_after=ws.writes,
+                    out=observation,
+                )
+                messages.append(Message(role="tool", tool_call_id=call.id, content=observation))
+                submitted = submitted or done
+            if submitted:
+                return True
+            if note := coach.after_step(step, submitted=False):
+                messages.append(Message(role="user", content=note))
+        return False
+
     async def _agent_attempt(
         self,
         task: FixTask,
@@ -324,35 +377,9 @@ class Engine:
         )
         temperature = 0.2 if branch == 0 else min(0.2 + 0.25 * branch, 1.0)
         attempt = Attempt(round=rnd, branch=branch, model_key="", checkpoint=None, edited_files=[])
-        submitted = False
-        for step in range(self.max_steps):
-            remaining = self.max_steps - step
-            if remaining == STEP_WARNING and self.max_steps > 2 * STEP_WARNING:
-                messages.append(Message(role="user", content=_steps_left_note(remaining)))
-            completion = await self.llm.complete(
-                role, compact(messages), temperature=temperature, tools=TOOL_SPECS
-            )
-            attempt.model_key = completion.model_key
-            attempt.cost_usd += completion.cost_usd
-            attempt.prompt_tokens += completion.prompt_tokens
-            attempt.completion_tokens += completion.completion_tokens
-            attempt.finish_reason = completion.finish_reason
-            attempt.steps += 1
-            messages.append(
-                Message(role="assistant", content=completion.text, tool_calls=completion.tool_calls)
-            )
-            if not completion.tool_calls:
-                # No tool use: accept whole-file blocks in plain text, then stop.
-                for path, content in parse_edits(completion.text, task.editable).items():
-                    await ws.call("write_file", _json(path, content))
-                attempt.response_excerpt = completion.text[-2000:]
-                break
-            for call in completion.tool_calls:
-                observation, done = await ws.call(call.name, call.arguments)
-                messages.append(Message(role="tool", tool_call_id=call.id, content=observation))
-                submitted = submitted or done
-            if submitted:
-                break
+        submitted = await self._episode(
+            task, ws, messages, attempt, role=role, temperature=temperature
+        )
 
         attempt.transcript = [m.to_openai() for m in messages]
         attempt.summary = ws.summary
@@ -384,8 +411,6 @@ class Engine:
         return attempt, new_state
 
 
-STEP_WARNING = 8
-
 # The diff of an in-image repository: tracked changes plus new files, except throwaway
 # scripts the agent left at the repository root (test_x.py, debug.py, check_*.py, ...).
 SCRATCH_AWARE_DIFF = (
@@ -394,14 +419,6 @@ SCRATCH_AWARE_DIFF = (
     'original_*|final_*|comprehensive_*) continue ;; esac; git add -N -- "$f"; done; '
     "git -c core.quotepath=off diff --no-color"
 )
-
-
-def _steps_left_note(remaining: int) -> str:
-    return (
-        f"You have {remaining} steps left. Stop exploring: finish the change, run the most "
-        "relevant check once, then call `submit`. Unsubmitted work is still verified, but a "
-        "focused finish is better than running out mid-edit."
-    )
 
 
 def _json(path: str, content: str) -> str:
