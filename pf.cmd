@@ -7,6 +7,7 @@ rem   pf validate [N]         free: check the first N HARD-51 tasks on Nebius (d
 rem   pf hard [N] [mode]      paid: solve the first N HARD-51 tasks (default 1, efficient)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
+chcp 65001 >nul
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 cd /d "%~dp0"
 if not exist runs mkdir runs
@@ -27,5 +28,5 @@ if /i "%STEP%"=="hard" (if not defined N set "N=1")
 if /i "%STEP%"=="hard" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --mode %MODE%"
 if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
 echo ^> %RUN%
-powershell -NoProfile -Command "cmd /c %RUN% 2>&1 | Tee-Object -FilePath runs\%STEP%.log; exit $LASTEXITCODE"
+powershell -NoProfile -Command "[Console]::OutputEncoding = [Text.Encoding]::UTF8; cmd /c '%RUN% 2>&1' | Tee-Object -FilePath runs\%STEP%.log; exit $LASTEXITCODE"
 echo Saved output to runs\%STEP%.log

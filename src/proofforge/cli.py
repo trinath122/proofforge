@@ -236,6 +236,17 @@ def bench(
                 "[green]yes[/green]" if v.valid else "[red]NO[/red]",
             )
         console.print(table)
+        for v in results:
+            if not v.valid:
+                failing = [g for g in v.solution_gates if not g.passed]
+                for g in failing:
+                    tail = (g.stdout_tail + "\n" + g.stderr_tail).strip()[-1500:]
+                    console.print(f"\n[bold]{v.case}[/bold]: {g.name} (exit {g.exit_code})")
+                    console.print(tail, markup=False, highlight=False)
+        report = Path("receipts") / f"validate-{time.strftime('%Y%m%d-%H%M%S')}.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps([v.model_dump() for v in results], indent=2), encoding="utf-8")
+        console.print(f"Full gate output: {report}")
         raise typer.Exit(0 if all(v.valid for v in results) else 1)
 
     settings = _settings(mode)
