@@ -91,3 +91,15 @@ def test_latest_read_of_each_file_stays_visible() -> None:
     assert any(c.startswith("A-old") and "elided" in c for c in contents), "stale read masked"
     assert any(c.startswith("B ") and "elided" not in c for c in contents)
     assert any(c.startswith("C ") and "elided" in c for c in contents), "edited since: masked"
+
+
+def test_reread_note_does_not_displace_the_real_read() -> None:
+    msgs = [Message(role="system", content="S"), Message(role="user", content="U")]
+    msgs += _read(0, "a.py", "A-real " + "a" * 2000)
+    msgs += _read(1, "a.py", "NOTE: you already read exactly this")
+    for i in range(KEEP_RECENT):
+        call = ToolCall(id=f"s{i}", name="search", arguments="{}")
+        msgs.append(Message(role="assistant", tool_calls=[call]))
+        msgs.append(Message(role="tool", tool_call_id=f"s{i}", content="hit " + "s" * 2000))
+    contents = [m.content for m in compact(msgs) if m.role == "tool"]
+    assert any(c.startswith("A-real") and "elided" not in c for c in contents)

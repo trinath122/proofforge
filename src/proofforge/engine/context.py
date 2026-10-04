@@ -15,6 +15,9 @@ from proofforge.llm.base import Message, ToolCall
 
 KEEP_RECENT = 10
 READ_BUDGET_CHARS = 60_000
+# Tool results that carry no file content: a re-read note or an error must never displace
+# the earlier read that does (that bug made agents re-read the same file dozens of times).
+_NOT_CONTENT = ("NOTE:", "ERROR:")
 STUB_CHARS = 240
 _BULKY_ARGS = ("content", "old", "new")
 
@@ -61,7 +64,7 @@ def _current_reads(messages: list[Message], cutoff: int) -> set[int]:
             continue
         name, args = calls[msg.tool_call_id]
         path = str(args.get("path", "")).removeprefix("/app/").removeprefix("./")
-        if name == "read_file" and i < cutoff:
+        if name == "read_file" and i < cutoff and not msg.content.startswith(_NOT_CONTENT):
             latest[path] = i
         elif name in ("write_file", "edit_file", "replace_lines"):
             written_after[path] = i
