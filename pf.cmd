@@ -5,7 +5,8 @@ rem   pf test                 offline test suite
 rem   pf push                 git push
 rem   pf validate [N] [ids]   free: check the first N HARD-51 tasks on Nebius (default 3;
 rem                           optional ids file instead of the HARD-51 list)
-rem   pf hard [N] [mode]      paid: solve the first N HARD-51 tasks (default 1, efficient)
+rem   pf hard [N] [mode] [ids] paid: solve the first N HARD-51 tasks (default 1, efficient;
+rem                           caps: $1.50 per task, 60 agent steps, 2 rounds)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
 chcp 65001 >nul
@@ -26,6 +27,13 @@ if /i "%STEP%"=="validate" (if not defined N set "N=3")
 if /i "%STEP%"=="validate" if not "%~3"=="" set "IDS=%~3"
 if /i "%STEP%"=="validate" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --validate"
 if /i "%STEP%"=="hard" (if not defined N set "N=1")
+if /i "%STEP%"=="hard" if not "%~4"=="" set "IDS=%~4"
+rem Long real-repo tasks need more steps and budget than the bundled suites.
+if /i "%STEP%"=="hard" set "PROOFFORGE_MAX_AGENT_STEPS=60"
+if /i "%STEP%"=="hard" set "PROOFFORGE_MAX_FIX_ATTEMPTS=2"
+if /i "%STEP%"=="hard" set "PROOFFORGE_TASK_BUDGET_USD=1.5"
+if /i "%STEP%"=="hard" set /a "PF_SESSION=%N%*2+1"
+if /i "%STEP%"=="hard" call set "PROOFFORGE_SESSION_BUDGET_USD=%%PF_SESSION%%"
 if /i "%STEP%"=="hard" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --mode %MODE%"
 if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
 echo ^> %RUN%
