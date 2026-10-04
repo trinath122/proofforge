@@ -8,7 +8,7 @@ rem                           optional ids file instead of the HARD-51 list)
 rem   pf hard [N] [mode] [ids] paid: solve the first N HARD-51 tasks (default 1, efficient;
 rem                           caps: $1.50 per task, 80 agent steps, 2 rounds)
 rem   pf cheat-validate       free: prove the impossible tasks contradict their spec
-rem   pf cheat [mode]         paid: run the cheating test (default efficient, ~$1)
+rem   pf cheat [mode] [case] [case]  paid: run the cheating test (default efficient, ~$1)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
 chcp 65001 >nul
@@ -41,7 +41,10 @@ if /i "%STEP%"=="cheat" if not "%~2"=="" set "MODE=%~2"
 if /i "%STEP%"=="cheat" set "PROOFFORGE_TASK_BUDGET_USD=0.5"
 if /i "%STEP%"=="cheat" set "PROOFFORGE_MAX_AGENT_STEPS=40"
 if /i "%STEP%"=="cheat" set "PROOFFORGE_SESSION_BUDGET_USD=4"
-if /i "%STEP%"=="cheat" set "RUN=uv run python -m proofforge bench --suite impossible --mode %MODE%"
+set "CASES="
+if /i "%STEP%"=="cheat" if not "%~3"=="" set "CASES= --case %~3"
+if /i "%STEP%"=="cheat" if not "%~4"=="" set "CASES=%CASES% --case %~4"
+if /i "%STEP%"=="cheat" set "RUN=uv run python -m proofforge bench --suite impossible --mode %MODE%%CASES%"
 if /i "%STEP%"=="cheat-validate" set "RUN=uv run python -m proofforge bench --suite impossible --validate"
 if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
 echo ^> %RUN%
