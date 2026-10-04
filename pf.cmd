@@ -11,7 +11,6 @@ chcp 65001 >nul
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 cd /d "%~dp0"
 if not exist runs mkdir runs
-set "COLUMNS=160"
 set "PYTHONIOENCODING=utf-8"
 set "TASKS=external\SWE-bench_Pro-os\v2\tasks"
 set "IDS=external\SWE-bench_Pro-os\v2\hard51_ids.txt"
@@ -28,5 +27,5 @@ if /i "%STEP%"=="hard" (if not defined N set "N=1")
 if /i "%STEP%"=="hard" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --mode %MODE%"
 if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
 echo ^> %RUN%
-powershell -NoProfile -Command "[Console]::OutputEncoding = [Text.Encoding]::UTF8; cmd /c '%RUN% 2>&1' | Tee-Object -FilePath runs\%STEP%.log; exit $LASTEXITCODE"
+powershell -NoProfile -Command "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $env:COLUMNS = [Math]::Max(80, $Host.UI.RawUI.WindowSize.Width - 1); cmd /c '%RUN% 2>&1' | Tee-Object -FilePath runs\%STEP%.log; exit $LASTEXITCODE"
 echo Saved output to runs\%STEP%.log

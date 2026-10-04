@@ -27,10 +27,17 @@ from proofforge.sandbox.base import Sandbox
 MAX_GATE_TIMEOUT_S = 3600
 DEFAULT_WORKDIR = "/app"
 
-# Runs the task's verifier and turns Harbor's reward file into a pass/fail exit code.
-# The reward is printed so receipts show partial credit for dense-reward suites.
+# Runs the task's verifier and turns Harbor's reward file into a pass/fail exit code. The
+# output ends with a short diagnostic (pass counts and the test runner's own tail) so
+# receipts explain a failure; agents never see holdout output, only how many checks failed.
 VERIFY = (
-    "mkdir -p /logs/verifier; bash /tests/test.sh; code=$?; "
+    "mkdir -p /logs/verifier; bash /tests/test.sh > /tmp/pf_verifier.log 2>&1; code=$?; "
+    "echo '--- verifier summary'; "
+    "grep -E '^(Required tests|Passed tests|RESULT)' /tmp/pf_verifier.log || "
+    "tail -c 1500 /tmp/pf_verifier.log; "
+    "echo '--- test runner output (tail)'; "
+    "tail -c 2000 /logs/verifier/run-script-stdout.txt 2>/dev/null; "
+    "tail -c 600 /logs/verifier/run-script-stderr.txt 2>/dev/null; "
     "r=$(cat /logs/verifier/reward.txt 2>/dev/null || true); "
     'echo "harbor reward: ${r:-none}"; '
     'if [ -n "$r" ]; then awk -v r="$r" \'BEGIN { exit !(r + 0 >= 1) }\'; '
