@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from proofforge.budget import BudgetGuard
+from proofforge.budget import BudgetGuard, ProviderBudgetError
 from proofforge.demo import VISIBLE_TEST
 from proofforge.engine.loop import Engine, unified_diff
 from proofforge.engine.task import FixTask
@@ -153,3 +153,15 @@ async def test_unusable_reply_is_explained_to_the_model(
     assert "Note on your previous reply" in retry_prompt
     assert "cut off at the output limit" in retry_prompt
     assert "Unusable model replies" in render_markdown(receipt)
+
+
+async def test_provider_budget_exhaustion_is_reported(sandbox: LocalSandbox, task: FixTask) -> None:
+    class Broke:
+        async def complete(self, *args: object, **kwargs: object) -> object:
+            raise ProviderBudgetError("budget is exhausted (HTTP 402)")
+
+    budget = BudgetGuard(task_cap_usd=1.0, session_cap_usd=1.0)
+    engine = Engine(sandbox, Broke(), budget, mode=Mode.DEV)  # type: ignore[arg-type]
+    receipt = await engine.fix(task)
+    assert receipt.status == "budget_exceeded"
+    assert "HTTP 402" in (receipt.note or "")

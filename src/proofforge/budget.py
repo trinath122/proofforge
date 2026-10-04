@@ -11,6 +11,13 @@ class BudgetExceededError(RuntimeError):
     """Raised when a call would push spend past a cap."""
 
 
+class ProviderBudgetError(BudgetExceededError):
+    """The model provider refused the call because the account has no budget left (HTTP 402).
+
+    Unlike our own caps this affects every later task too, so a benchmark run stops.
+    """
+
+
 @dataclass
 class Usage:
     prompt_tokens: int = 0

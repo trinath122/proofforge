@@ -253,6 +253,7 @@ def bench(
     _apply_strategy(settings, strategy)
     engine, budget = _engine(settings)
     receipts = asyncio.run(_run_all(engine, selected, settings))
+    selected = selected[: len(receipts)]  # a provider outage can stop the run early
     table = Table("Suite", "Case", "Strategy", "Status", "Attempts", "Steps", "Cost", "Time")
     for c, r in zip(selected, receipts, strict=True):
         color = "green" if r.status == "verified" else "yellow"
@@ -311,6 +312,9 @@ async def _run_all(engine: Engine, selected: list[Case], settings: Settings) -> 
         receipt = await engine.fix(case.load())
         write_receipt(receipt, settings.receipts_dir)
         receipts.append(receipt)
+        if receipt.status == "budget_exceeded" and "HTTP 402" in (receipt.note or ""):
+            console.print(f"[red]{receipt.note}[/red] Stopping; results so far are kept.")
+            break
     return receipts
 
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import APIStatusError, AsyncOpenAI
 
-from proofforge.budget import BudgetGuard
+from proofforge.budget import BudgetGuard, ProviderBudgetError
 from proofforge.llm.base import Completion, Message, ToolCall
 from proofforge.models.registry import (
     GLOBAL_BASE_URL,
@@ -45,13 +45,21 @@ class TokenFactoryLLM:
         spec = model_for(role, self._mode)
         self._budget.ensure_headroom()
         extra: dict[str, Any] = {"tools": tools, "tool_choice": "auto"} if tools else {}
-        response = await self._client(spec.base_url).chat.completions.create(
-            model=spec.model_id,
-            messages=[m.to_openai() for m in messages],  # type: ignore[misc]
-            temperature=temperature,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            **extra,
-        )
+        try:
+            response = await self._client(spec.base_url).chat.completions.create(
+                model=spec.model_id,
+                messages=[m.to_openai() for m in messages],  # type: ignore[misc]
+                temperature=temperature,
+                max_tokens=MAX_OUTPUT_TOKENS,
+                **extra,
+            )
+        except APIStatusError as exc:
+            if exc.status_code == 402:
+                raise ProviderBudgetError(
+                    "Nebius Token Factory refused the call: the account's budget is exhausted "
+                    "(HTTP 402). Add funds or raise the project's spending limit, then re-run."
+                ) from exc
+            raise
         usage = response.usage
         prompt = usage.prompt_tokens if usage else 0
         completion = usage.completion_tokens if usage else 0
