@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from proofforge.budget import BudgetExceededError, BudgetGuard
+from proofforge.engine.context import compact
 from proofforge.engine.prompts import build_agent_messages, build_messages, parse_edits
 from proofforge.engine.task import FixTask
 from proofforge.engine.tools import TOOL_SPECS, Workspace
@@ -232,6 +233,8 @@ class Engine:
             edited_files=sorted(allowed),
             rejected_edits=rejected,
             cost_usd=completion.cost_usd,
+            prompt_tokens=completion.prompt_tokens,
+            completion_tokens=completion.completion_tokens,
             finish_reason=completion.finish_reason,
         )
         if not allowed:
@@ -294,10 +297,12 @@ class Engine:
         submitted = False
         for _ in range(self.max_steps):
             completion = await self.llm.complete(
-                role, messages, temperature=temperature, tools=TOOL_SPECS
+                role, compact(messages), temperature=temperature, tools=TOOL_SPECS
             )
             attempt.model_key = completion.model_key
             attempt.cost_usd += completion.cost_usd
+            attempt.prompt_tokens += completion.prompt_tokens
+            attempt.completion_tokens += completion.completion_tokens
             attempt.finish_reason = completion.finish_reason
             attempt.steps += 1
             messages.append(

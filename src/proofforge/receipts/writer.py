@@ -16,7 +16,9 @@ def render_markdown(r: Receipt) -> str:
         f"- **Status:** {r.status}",
         f"- **Run:** `{r.run_id}`  |  mode `{r.mode}`  |  image `{r.image}`",
         f"- **Oracle digest:** `{r.oracle_digest[:16]}...`",
-        f"- **Cost:** ${r.total_cost_usd:.4f}  |  **Wall time:** {r.wall_time_s:.1f}s",
+        f"- **Cost:** ${r.total_cost_usd:.4f}  |  **Wall time:** {r.wall_time_s:.1f}s  |  "
+        f"**Tokens:** {sum(a.prompt_tokens for a in r.attempts):,} in, "
+        f"{sum(a.completion_tokens for a in r.attempts):,} out",
         f"- **Final checkpoint:** `{r.final_checkpoint or '-'}`",
         "",
         "## Reproduction (must fail before the change)",

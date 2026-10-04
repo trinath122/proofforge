@@ -30,6 +30,8 @@ class Attempt(BaseModel):
     tampered_files: list[str] = Field(default_factory=list)
     gates: list[GateResult] = Field(default_factory=list)
     cost_usd: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
     error: str | None = None
     finish_reason: str | None = None
     response_excerpt: str = Field(default="", description="tail of the raw model reply")
