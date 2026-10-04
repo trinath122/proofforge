@@ -3,7 +3,8 @@ rem ProofForge runner: one short command per live step. Output is also saved in 
 rem so Claude can read the results directly.
 rem   pf test                 offline test suite
 rem   pf push                 git push
-rem   pf validate [N]         free: check the first N HARD-51 tasks on Nebius (default 3)
+rem   pf validate [N] [ids]   free: check the first N HARD-51 tasks on Nebius (default 3;
+rem                           optional ids file instead of the HARD-51 list)
 rem   pf hard [N] [mode]      paid: solve the first N HARD-51 tasks (default 1, efficient)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
@@ -22,6 +23,7 @@ set "RUN="
 if /i "%STEP%"=="test" set "RUN=uv run python -m pytest"
 if /i "%STEP%"=="push" set "RUN=git push"
 if /i "%STEP%"=="validate" (if not defined N set "N=3")
+if /i "%STEP%"=="validate" if not "%~3"=="" set "IDS=%~3"
 if /i "%STEP%"=="validate" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --validate"
 if /i "%STEP%"=="hard" (if not defined N set "N=1")
 if /i "%STEP%"=="hard" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --mode %MODE%"
