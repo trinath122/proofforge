@@ -15,6 +15,7 @@ Status = Literal[
     "budget_exceeded",
     "already_passing",
     "reproduction_failed",
+    "infra_error",
 ]
 
 
@@ -37,6 +38,9 @@ class Attempt(BaseModel):
     response_excerpt: str = Field(default="", description="tail of the raw model reply")
     steps: int = 0
     summary: str = ""
+    spec_misses: list[str] = Field(
+        default_factory=list, description="listed interfaces missing at first submit"
+    )
     transcript: list[dict[str, Any]] = Field(
         default_factory=list, description="full agent conversation; training data"
     )

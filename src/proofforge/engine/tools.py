@@ -11,6 +11,7 @@ import json
 import posixpath
 from typing import Any
 
+from proofforge.engine.spec import Interface
 from proofforge.gates.base import workspace_path
 from proofforge.sandbox.base import NOOP, WORKDIR, Checkpoint, Sandbox
 
@@ -30,7 +31,7 @@ import json, os, re, sys
 SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules"}
 SKIP = {".pf_tool.py", ".pf_tool_args.json"}
 a = json.load(open(".pf_tool_args.json"))
-root = a["path"]
+root = a.get("path", ".")
 
 
 def walk():
@@ -50,6 +51,18 @@ def walk():
 
 
 out = []
+if a["op"] == "interfaces":
+    for item in a["items"]:
+        path = item["path"]
+        if not os.path.isfile(path):
+            print("%s: file %s does not exist" % (item["name"], path))
+            continue
+        if item["kind"] == "file":
+            continue
+        text = open(path, encoding="utf-8", errors="replace").read()
+        if not re.search(r"(?<![\w$])%s(?![\w$])" % re.escape(item["symbol"]), text):
+            print("%s: `%s` not found in %s" % (item["name"], item["symbol"], path))
+    sys.exit(0)
 if a["op"] == "list":
     out = sorted(walk())[:400]
 else:
@@ -169,9 +182,13 @@ class Workspace:
         *,
         python: str = "python3",
         workdir: str = WORKDIR,
+        interfaces: list[Interface] | None = None,
     ) -> None:
         self.sandbox = sandbox
         self.workdir = workdir
+        self.interfaces = interfaces or []
+        self.spec_misses: list[str] = []
+        self._spec_checked = False
         self.python = python
         self.checkpoint = checkpoint
         self.protected = protected
@@ -302,5 +319,25 @@ class Workspace:
         return await self._write(rel, text.replace(old, new, 1))
 
     async def _tool_submit(self, summary: str = "") -> tuple[str, bool]:
+        if self.interfaces and not self._spec_checked:
+            # One spec-conformance check, from the task text only (never hidden tests).
+            self._spec_checked = True
+            items = [
+                {"path": i.path, "name": i.name, "symbol": i.symbol, "kind": i.kind}
+                for i in self.interfaces
+            ]
+            report = await self._helper(op="interfaces", items=items)
+            if report.startswith("ERROR:"):  # the check itself failed: never block on it
+                report = ""
+            self.spec_misses = [ln for ln in report.splitlines() if ln.strip()]
+            if self.spec_misses:
+                return (
+                    "NOT SUBMITTED. The task's 'New Interfaces' section lists names that hidden "
+                    "tests will import, and these are missing:\n- "
+                    + "\n- ".join(self.spec_misses[:20])
+                    + "\nCreate them exactly as specified (same file, same name), then call "
+                    "submit again.",
+                    False,
+                )
         self.summary = summary
         return "submitted for verification", True

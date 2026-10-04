@@ -309,7 +309,24 @@ async def _run_all(engine: Engine, selected: list[Case], settings: Settings) -> 
     for case in selected:
         engine.strategy = _strategy_for(case, settings)
         console.print(f"[dim]running {case.suite}/{case.name} ({engine.strategy})...[/dim]")
-        receipt = await engine.fix(case.load())
+        try:
+            receipt = await engine.fix(case.load())
+        except Exception as exc:  # one broken task must never sink a whole run
+            receipt = Receipt(
+                run_id=f"{time.strftime('%Y%m%d-%H%M%S')}-error",
+                task_title=case.name,
+                mode=settings.mode.value,
+                status="infra_error",
+                image="",
+                base_checkpoint="",
+                oracle_digest="",
+                protected_hashes={},
+                reproduction=[],
+                attempts=[],
+                total_cost_usd=engine.budget.task.cost_usd,
+                note=f"{type(exc).__name__}: {exc}"[:1000],
+            )
+            console.print(f"[red]{case.name}: {receipt.note}[/red] Continuing with the next task.")
         write_receipt(receipt, settings.receipts_dir)
         receipts.append(receipt)
         if receipt.status == "budget_exceeded" and "HTTP 402" in (receipt.note or ""):

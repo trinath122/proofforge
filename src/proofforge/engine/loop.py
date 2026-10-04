@@ -19,6 +19,7 @@ from typing import Literal
 from proofforge.budget import BudgetExceededError, BudgetGuard
 from proofforge.engine.context import compact
 from proofforge.engine.prompts import build_agent_messages, build_messages, parse_edits
+from proofforge.engine.spec import parse_interfaces
 from proofforge.engine.task import FixTask
 from proofforge.engine.tools import TOOL_SPECS, Workspace
 from proofforge.gates.base import (
@@ -307,6 +308,7 @@ class Engine:
             protected=set(task.protected),
             python=self.python,
             workdir=task.workdir,
+            interfaces=parse_interfaces(task.description),
         )
         messages: list[Message] = build_agent_messages(
             task.description,
@@ -354,6 +356,7 @@ class Engine:
 
         attempt.transcript = [m.to_openai() for m in messages]
         attempt.summary = ws.summary
+        attempt.spec_misses = ws.spec_misses
         attempt.rejected_edits = sorted(set(ws.refused))
         attempt.edited_files = sorted(ws.touched)
         if not ws.touched:

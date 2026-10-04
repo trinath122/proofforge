@@ -129,7 +129,9 @@ a loop that never exits): read the code or run one narrower test, never re-run b
 - Put scratch and debug scripts under /tmp, never in the repository: everything you leave \
 in the repository is part of your change.
 - Before you submit, go through every requirement in the task one by one and confirm your \
-change satisfies it, including exact error messages and edge cases."""
+change satisfies it, including exact error messages and edge cases.
+- If the task lists new interfaces (paths, names, types), create each one exactly as listed: \
+hidden tests import them by those names. Submissions are checked for them."""
 
 
 def build_agent_messages(
