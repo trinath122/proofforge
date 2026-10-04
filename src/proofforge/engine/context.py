@@ -63,7 +63,7 @@ def _current_reads(messages: list[Message], cutoff: int) -> set[int]:
         path = str(args.get("path", "")).removeprefix("/app/").removeprefix("./")
         if name == "read_file" and i < cutoff:
             latest[path] = i
-        elif name in ("write_file", "edit_file"):
+        elif name in ("write_file", "edit_file", "replace_lines"):
             written_after[path] = i
     keep: set[int] = set()
     budget = READ_BUDGET_CHARS

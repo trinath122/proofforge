@@ -149,6 +149,7 @@ def test_tool_specs_are_well_formed() -> None:
         "run",
         "write_file",
         "edit_file",
+        "replace_lines",
         "submit",
     }
     for spec in TOOL_SPECS:
@@ -169,7 +170,8 @@ async def test_workspace_tool_errors(sandbox: LocalSandbox) -> None:
     )
     assert (await ws.call("read_file", '{"wrong": 1}'))[0].startswith("ERROR: bad arguments")
     dup = await ws.call("edit_file", json.dumps({"path": "a.py", "old": "x = 1\n", "new": "z\n"}))
-    assert "found 2" in dup[0]
+    assert "matches 2 places" in dup[0]
+    assert "run" in (await ws.call("grep", "{}"))[0], "unknown tools point to run"
     ranged = await ws.call(
         "read_file", json.dumps({"path": "a.py", "start_line": 3, "end_line": 3})
     )

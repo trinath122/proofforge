@@ -11,6 +11,7 @@ import json
 import posixpath
 from typing import Any
 
+from proofforge.engine.edits import EditResult, apply_edit, replace_lines
 from proofforge.engine.spec import Interface
 from proofforge.gates.base import workspace_path
 from proofforge.sandbox.base import NOOP, WORKDIR, Checkpoint, Sandbox
@@ -134,9 +135,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
     ),
     _fn(
         "edit_file",
-        "Replace one exact, unique occurrence of `old` with `new` in a file.",
+        "Replace one unique occurrence of `old` with `new` in a file. Copy `old` from "
+        "read_file without the line numbers; whitespace differences are tolerated.",
         {"path": _STR, "old": _STR, "new": _STR},
         ["path", "old", "new"],
+    ),
+    _fn(
+        "replace_lines",
+        "Replace lines start_line..end_line (inclusive, as numbered by read_file) with `content`.",
+        {"path": _STR, "start_line": _INT, "end_line": _INT, "content": _STR},
+        ["path", "start_line", "end_line", "content"],
     ),
     _fn(
         "submit",
@@ -210,7 +218,12 @@ class Workspace:
             return f"ERROR: could not parse arguments: {exc}", False
         handler = getattr(self, f"_tool_{name}", None)
         if handler is None:
-            return f"ERROR: unknown tool '{name}'", False
+            return (
+                f"ERROR: unknown tool '{name}'. Available tools: "
+                + ", ".join(t["function"]["name"] for t in TOOL_SPECS)
+                + ". For shell commands such as grep, find or cat, use `run`.",
+                False,
+            )
         try:
             result: tuple[str, bool] = await handler(**args)
         except PathError as exc:
@@ -305,20 +318,33 @@ class Workspace:
     async def _tool_write_file(self, path: str, content: str) -> tuple[str, bool]:
         return await self._write(normalize(path, self.workdir), content)
 
+    async def _read_text(self, rel: str) -> str | None:
+        try:
+            return (await self.sandbox.read(self.checkpoint, self._path(rel))).decode()
+        except Exception:
+            return None
+
+    async def _apply(self, rel: str, result: EditResult) -> tuple[str, bool]:
+        if result.text is None:
+            return f"ERROR: edit not applied to {rel}: {result.message}", False
+        out, done = await self._write(rel, result.text)
+        return f"{out} ({result.message})", done
+
     async def _tool_edit_file(self, path: str, old: str, new: str) -> tuple[str, bool]:
         rel = normalize(path, self.workdir)
-        try:
-            text = (await self.sandbox.read(self.checkpoint, self._path(rel))).decode()
-        except Exception:
+        text = await self._read_text(rel)
+        if text is None:
             return f"ERROR: cannot read {rel}", False
-        count = text.count(old) if old else 0
-        if count != 1:
-            return (
-                f"ERROR: `old` must match exactly once in {rel}, found {count}. "
-                "Include more surrounding lines, or use write_file.",
-                False,
-            )
-        return await self._write(rel, text.replace(old, new, 1))
+        return await self._apply(rel, apply_edit(text, old, new))
+
+    async def _tool_replace_lines(
+        self, path: str, start_line: int, end_line: int, content: str
+    ) -> tuple[str, bool]:
+        rel = normalize(path, self.workdir)
+        text = await self._read_text(rel)
+        if text is None:
+            return f"ERROR: cannot read {rel}", False
+        return await self._apply(rel, replace_lines(text, int(start_line), int(end_line), content))
 
     async def _tool_submit(self, summary: str = "") -> tuple[str, bool]:
         if self.interfaces and not self._spec_checked:

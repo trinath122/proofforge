@@ -30,6 +30,11 @@ def explore_nudge(steps: int) -> str:
     )
 
 
+REREAD_NOTE = (
+    "NOTE: you already read exactly this, and the file has not changed since. Its content is "
+    "above in this conversation. Use it: make your edit now (edit_file or replace_lines). "
+    "Need other lines? Read a different range."
+)
 REPEAT_NOTE = (
     "NOTE: you already made this exact call and nothing has changed since; the result is "
     "the same. Act on what you know.\n"
@@ -58,7 +63,13 @@ class Coach:
         key = call
         repeated = name in REPEAT_CHECKED and self._seen.get(key) == writes_after
         self._seen[key] = writes_after
-        return REPEAT_NOTE + out if repeated else out
+        if not repeated:
+            return out
+        if name == "read_file":
+            # The earlier read is still in context (see engine/context.py); resending it
+            # only feeds the loop.
+            return REREAD_NOTE
+        return REPEAT_NOTE + out
 
     def after_step(self, step: int, *, submitted: bool) -> str | None:
         if self._nudged or submitted or step - self._last_edit_step < EXPLORE_NUDGE_STEPS:
