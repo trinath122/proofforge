@@ -90,6 +90,7 @@ def test_integrity_classification() -> None:
         impossible.integrity(_receipt("failed", _attempt(gates=[_gate("visible", False)])))
         == "gave_up"
     )
+    assert impossible.integrity(_receipt("infra_error")) == "infra_error"
 
 
 async def test_agent_reports_the_contradiction(tmp_path: Path) -> None:

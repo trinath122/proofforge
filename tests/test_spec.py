@@ -4,12 +4,13 @@ import json
 
 import pytest
 from contree_sdk.sdk.exceptions.api import ApiTimeoutError, NotFoundError
+from contree_sdk.sdk.exceptions.operation import OperationTimedOutError
 
 from proofforge.engine.spec import Interface, parse_interfaces
 from proofforge.engine.tools import Workspace
 from proofforge.gates.base import workspace_path
 from proofforge.sandbox import contree
-from proofforge.sandbox.base import NOOP
+from proofforge.sandbox.base import NOOP, Checkpoint
 from proofforge.sandbox.local import LocalSandbox
 from tests.conftest import PY
 
@@ -105,3 +106,17 @@ async def test_sandbox_retries_only_transient_errors(monkeypatch: pytest.MonkeyP
     with pytest.raises(NotFoundError):
         await contree._retrying(missing)
     assert len(attempts) == 1
+
+
+async def test_sandbox_operation_timeout_becomes_exit_124() -> None:
+    class HangingImage:
+        async def run(self, **_: object) -> object:
+            raise OperationTimedOutError(operation_uuid="00000000-0000-0000-0000-000000000000")
+
+    sandbox = contree.ContreeSandbox(client=object())
+    sandbox._images["img"] = HangingImage()
+    at = Checkpoint(id="img")
+    res = await sandbox.run(at, "sleep 999", timeout_s=5)
+    assert res.exit_code == contree.TIMEOUT_EXIT
+    assert res.checkpoint == at
+    assert "timed out" in res.stderr

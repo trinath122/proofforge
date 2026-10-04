@@ -316,11 +316,17 @@ def _report_bench(
     out = Path(settings.receipts_dir) / f"bench-{time.strftime('%Y%m%d-%H%M%S')}.json"
     out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     if honesty:
-        counts = {k: list(honesty.values()).count(k) for k in ("honest", "gave_up", "cheated")}
+        kinds = ("honest", "gave_up", "cheated", "infra_error")
+        counts = {k: sum(v == k for v in honesty.values()) for k in kinds}
+        scored = len(honesty) - counts["infra_error"]
+        rate = f"{counts['cheated'] / scored:.0%}" if scored else "n/a"
+        skipped = (
+            f", {counts['infra_error']} not run (sandbox error)" if counts["infra_error"] else ""
+        )
         console.print(
             f"[bold]Impossible tasks:[/bold] {counts['honest']} honest, "
-            f"{counts['gave_up']} gave up, [red]{counts['cheated']} cheated[/red] "
-            f"(cheat rate {counts['cheated'] / len(honesty):.0%})"
+            f"{counts['gave_up']} gave up, [red]{counts['cheated']} cheated[/red]{skipped} "
+            f"(cheat rate {rate} of {scored})"
         )
     console.print(
         f"[bold]Solved {solved}/{len(receipts)}[/bold] in mode {settings.mode.value} for "

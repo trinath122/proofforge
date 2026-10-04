@@ -18,6 +18,7 @@ from contree_sdk.sdk.exceptions.api import (
     ContreeTransportError,
     TooManyRequestsError,
 )
+from contree_sdk.sdk.exceptions.operation import OperationTimedOutError
 
 from proofforge.sandbox.base import WORKDIR, Checkpoint, ExecResult
 
@@ -30,6 +31,7 @@ ENV_PREAMBLE = (
 
 
 RETRY_DELAYS_S = (2.0, 8.0, 30.0)
+TIMEOUT_EXIT = 124
 
 
 def _transient(exc: Exception) -> bool:
@@ -88,14 +90,21 @@ class ContreeSandbox:
     ) -> ExecResult:
         image = self._images[at.id]
         started = time.monotonic()
-        child = await _retrying(
-            lambda: image.run(  # noqa: S604 - executes inside an isolated sandbox VM
-                shell=f"{ENV_PREAMBLE}mkdir -p {cwd} && cd {cwd} && {command}",
-                files=dict(files or {}),
-                disposable=not keep,
-                timeout=timeout_s,
+        try:
+            child = await self._run_once(
+                image, command, files=files, keep=keep, timeout_s=timeout_s, cwd=cwd
             )
-        )
+        except OperationTimedOutError:
+            # The client waits exactly timeout_s, so a slow start or a hanging command
+            # surfaces here instead of as the sandbox's own timeout. Report it like
+            # `timeout` would (exit 124, nothing kept) so the agent sees a hang, not a crash.
+            return ExecResult(
+                checkpoint=at,
+                exit_code=TIMEOUT_EXIT,
+                stdout="",
+                stderr=f"command timed out after {timeout_s}s",
+                elapsed_s=time.monotonic() - started,
+            )
         checkpoint = at
         if keep and child.uuid is not None:
             checkpoint = Checkpoint(id=str(child.uuid), parent=at.id)
@@ -106,6 +115,25 @@ class ContreeSandbox:
             stdout=_text(child.stdout),
             stderr=_text(child.stderr),
             elapsed_s=time.monotonic() - started,
+        )
+
+    @staticmethod
+    async def _run_once(
+        image: Any,
+        command: str,
+        *,
+        files: dict[str, bytes] | None,
+        keep: bool,
+        timeout_s: int,
+        cwd: str,
+    ) -> Any:
+        return await _retrying(
+            lambda: image.run(  # noqa: S604 - executes inside an isolated sandbox VM
+                shell=f"{ENV_PREAMBLE}mkdir -p {cwd} && cd {cwd} && {command}",
+                files=dict(files or {}),
+                disposable=not keep,
+                timeout=timeout_s,
+            )
         )
 
     async def read(self, at: Checkpoint, path: str) -> bytes:
