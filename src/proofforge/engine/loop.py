@@ -213,7 +213,7 @@ class Engine:
             return unified_diff(task.editable, state.files)
         res = await self.sandbox.run(
             state.checkpoint,
-            "git add -A -N . >/dev/null 2>&1; git -c core.quotepath=off diff --no-color",
+            SCRATCH_AWARE_DIFF,
             keep=False,
             timeout_s=120,
             cwd=task.workdir,
@@ -382,6 +382,15 @@ class Engine:
 
 
 STEP_WARNING = 8
+
+# The diff of an in-image repository: tracked changes plus new files, except throwaway
+# scripts the agent left at the repository root (test_x.py, debug.py, check_*.py, ...).
+SCRATCH_AWARE_DIFF = (
+    "git ls-files --others --exclude-standard | while IFS= read -r f; do "
+    'case "$f" in */*) ;; test_*|*_test.py|debug*|check_*|manual*|scratch*|tmp*|repro*|'
+    'original_*|final_*|comprehensive_*) continue ;; esac; git add -N -- "$f"; done; '
+    "git -c core.quotepath=off diff --no-color"
+)
 
 
 def _steps_left_note(remaining: int) -> str:

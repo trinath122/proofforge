@@ -90,6 +90,7 @@ def test_verify_command_reads_reward(tmp_path: Path, script: str, passes: bool) 
     assert "harbor reward:" in result.stdout
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="in-image repositories run on Linux images")
 async def test_agent_fixes_in_image_repo_end_to_end(tmp_path: Path) -> None:
     # LocalSandbox stands in for the task image: the repo is seeded at /app and committed,
     # and a portable Python verifier replaces the bash one.
@@ -108,6 +109,8 @@ async def test_agent_fixes_in_image_repo_end_to_end(tmp_path: Path) -> None:
             calls(("list_files", {"path": "/app"})),
             calls(("search", {"pattern": "def add"})),
             calls(("write_file", {"path": "/app/calc.py", "content": FIXED})),
+            calls(("write_file", {"path": "debug_calc.py", "content": "print(1)\n"})),
+            calls(("write_file", {"path": "pkg/new_mod.py", "content": "X = 1\n"})),
             calls(("submit", {"summary": "add instead of subtract"})),
         ],
         budget,
@@ -127,6 +130,8 @@ async def test_agent_fixes_in_image_repo_end_to_end(tmp_path: Path) -> None:
     assert "+    return a + b" in receipt.diff
     assert "-    return a - b" in receipt.diff
     assert ".pf_tool" not in receipt.diff
+    assert "debug_calc.py" not in receipt.diff, "root-level scratch scripts are left out"
+    assert "pkg/new_mod.py" in receipt.diff, "real new files are part of the change"
 
 
 def test_loader_keeps_crlf_in_test_data(tmp_path: Path) -> None:
