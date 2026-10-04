@@ -24,3 +24,6 @@ build/
 .idea/
 .DS_Store
 Thumbs.db
+
+# third-party benchmark task definitions, fetched locally
+/external/
