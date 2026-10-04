@@ -323,7 +323,10 @@ class Engine:
         temperature = 0.2 if branch == 0 else min(0.2 + 0.25 * branch, 1.0)
         attempt = Attempt(round=rnd, branch=branch, model_key="", checkpoint=None, edited_files=[])
         submitted = False
-        for _ in range(self.max_steps):
+        for step in range(self.max_steps):
+            remaining = self.max_steps - step
+            if remaining == STEP_WARNING and self.max_steps > 2 * STEP_WARNING:
+                messages.append(Message(role="user", content=_steps_left_note(remaining)))
             completion = await self.llm.complete(
                 role, compact(messages), temperature=temperature, tools=TOOL_SPECS
             )
@@ -376,6 +379,17 @@ class Engine:
             ws.checkpoint, files, attempt.gates, attempt.rejected_edits, notes, ws.summary
         )
         return attempt, new_state
+
+
+STEP_WARNING = 8
+
+
+def _steps_left_note(remaining: int) -> str:
+    return (
+        f"You have {remaining} steps left. Stop exploring: finish the change, run the most "
+        "relevant check once, then call `submit`. Unsubmitted work is still verified, but a "
+        "focused finish is better than running out mid-edit."
+    )
 
 
 def _json(path: str, content: str) -> str:

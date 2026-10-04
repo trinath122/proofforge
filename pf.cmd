@@ -6,7 +6,7 @@ rem   pf push                 git push
 rem   pf validate [N] [ids]   free: check the first N HARD-51 tasks on Nebius (default 3;
 rem                           optional ids file instead of the HARD-51 list)
 rem   pf hard [N] [mode] [ids] paid: solve the first N HARD-51 tasks (default 1, efficient;
-rem                           caps: $1.50 per task, 60 agent steps, 2 rounds)
+rem                           caps: $1.50 per task, 80 agent steps, 2 rounds)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
 chcp 65001 >nul
@@ -29,7 +29,7 @@ if /i "%STEP%"=="validate" set "RUN=uv run python -m proofforge bench --suite ha
 if /i "%STEP%"=="hard" (if not defined N set "N=1")
 if /i "%STEP%"=="hard" if not "%~4"=="" set "IDS=%~4"
 rem Long real-repo tasks need more steps and budget than the bundled suites.
-if /i "%STEP%"=="hard" set "PROOFFORGE_MAX_AGENT_STEPS=60"
+if /i "%STEP%"=="hard" set "PROOFFORGE_MAX_AGENT_STEPS=80"
 if /i "%STEP%"=="hard" set "PROOFFORGE_MAX_FIX_ATTEMPTS=2"
 if /i "%STEP%"=="hard" set "PROOFFORGE_TASK_BUDGET_USD=1.5"
 if /i "%STEP%"=="hard" set /a "PF_SESSION=%N%*2+1"

@@ -5,7 +5,7 @@ import json
 import pytest
 
 from proofforge.budget import BudgetGuard
-from proofforge.engine.loop import Engine
+from proofforge.engine.loop import STEP_WARNING, Engine
 from proofforge.engine.task import FixTask
 from proofforge.engine.tools import TOOL_SPECS, PathError, Workspace, normalize
 from proofforge.gates.base import workspace_path
@@ -214,3 +214,12 @@ async def test_run_timeout_explains_hang(sandbox: LocalSandbox) -> None:
     assert "hit the 1s timeout" in out
     quick, _ = await ws.call("run", json.dumps({"command": f'{PY} -c "print(7)"'}))
     assert "timeout" not in quick
+
+
+async def test_agent_is_warned_before_the_step_limit(
+    sandbox: LocalSandbox, budget: BudgetGuard, task: FixTask
+) -> None:
+    llm = ScriptedLLM([calls(("list_files", {}))] * 20, budget)
+    await agent(sandbox, llm, budget, max_steps=20, max_rounds=1).fix(task)
+    warned = [i for i, (_, msgs, _) in enumerate(llm.calls) if "steps left" in msgs[-1].content]
+    assert warned == [20 - STEP_WARNING]

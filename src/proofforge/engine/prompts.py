@@ -125,7 +125,11 @@ Rules:
 inputs, hard-code expected outputs, or weaken error handling to make checks pass.
 - Keep reasoning brief and act through tools. Command output is truncated; narrow it down.
 - Commands time out after 60s. A timeout means the code hangs (deadlock, missed wakeup, \
-a loop that never exits): read the code or run one narrower test, never re-run blindly."""
+a loop that never exits): read the code or run one narrower test, never re-run blindly.
+- Put scratch and debug scripts under /tmp, never in the repository: everything you leave \
+in the repository is part of your change.
+- Before you submit, go through every requirement in the task one by one and confirm your \
+change satisfies it, including exact error messages and edge cases."""
 
 
 def build_agent_messages(
