@@ -117,8 +117,12 @@ class Engine:
         run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
 
         base = await self.sandbox.base(task.image)
-        seed = {workspace_path(p): c.encode() for p, c in task.workspace_seed().items()}
-        setup = await self.sandbox.run(base, task.setup_command, files=seed, keep=True)
+        seed = {
+            workspace_path(p, task.workdir): c.encode() for p, c in task.workspace_seed().items()
+        }
+        setup = await self.sandbox.run(
+            base, task.setup_command, files=seed, keep=True, cwd=task.workdir
+        )
 
         def receipt(status: Status, **kw: object) -> Receipt:
             return Receipt(
@@ -144,13 +148,17 @@ class Engine:
                 note=f"setup failed: {setup.stderr[-500:]}",
             )
 
-        repro = await run_gates(self.sandbox, setup.checkpoint, oracle, include_holdout=False)
+        # With no visible checks (SWE-bench style) the hidden ones prove the bug exists.
+        # Their output is never shown to the agent, only how many failed.
+        repro = await run_gates(
+            self.sandbox, setup.checkpoint, oracle, include_holdout=task.hidden_only
+        )
         if all(g.passed for g in repro):
             return receipt(
                 "already_passing",
                 reproduction=repro,
                 attempts=[],
-                note="Visible gates already pass before any change; nothing to prove.",
+                note="Gates already pass before any change; nothing to prove.",
             )
 
         state = _State(setup.checkpoint, dict(task.editable), repro, [])
@@ -173,7 +181,7 @@ class Engine:
                             attempts=attempts,
                             final_checkpoint=final.checkpoint.id,
                             final_gates=attempt.gates,
-                            diff=unified_diff(task.editable, final.files),
+                            diff=await self._diff(task, final),
                         )
                 usable = [(a, s) for a, s in outcomes if s is not None and not a.tampered_files]
                 if usable:
@@ -188,16 +196,29 @@ class Engine:
                 "budget_exceeded",
                 reproduction=repro,
                 attempts=attempts,
-                diff=unified_diff(task.editable, state.files),
+                diff=await self._diff(task, state),
                 note=str(exc),
             )
         return receipt(
             "failed",
             reproduction=repro,
             attempts=attempts,
-            diff=unified_diff(task.editable, state.files),
+            diff=await self._diff(task, state),
             note=f"No candidate passed every gate in {self.max_rounds} round(s).",
         )
+
+    async def _diff(self, task: FixTask, state: _State) -> str:
+        """The change as a unified diff: from git for in-image repositories."""
+        if not task.repo_in_image:
+            return unified_diff(task.editable, state.files)
+        res = await self.sandbox.run(
+            state.checkpoint,
+            "git add -A -N . >/dev/null 2>&1; git -c core.quotepath=off diff --no-color",
+            keep=False,
+            timeout_s=120,
+            cwd=task.workdir,
+        )
+        return res.stdout if res.ok else ""
 
     async def _attempt(
         self,
@@ -209,7 +230,7 @@ class Engine:
         branch: int,
         role: Role,
     ) -> tuple[Attempt, _State | None]:
-        if self.strategy == "agent":
+        if self.strategy == "agent" or task.repo_in_image:
             return await self._agent_attempt(task, oracle, state, rnd=rnd, branch=branch, role=role)
         messages = build_messages(
             task.description,
@@ -247,7 +268,7 @@ class Engine:
         applied = await self.sandbox.run(
             state.checkpoint,
             NOOP,
-            files={workspace_path(p): c.encode() for p, c in allowed.items()},
+            files={workspace_path(p, task.workdir): c.encode() for p, c in allowed.items()},
             keep=True,
         )
         attempt.checkpoint = applied.checkpoint.id
@@ -281,11 +302,18 @@ class Engine:
     ) -> tuple[Attempt, _State | None]:
         """One agent episode: explore, run, edit and submit, all inside the sandbox."""
         ws = Workspace(
-            self.sandbox, state.checkpoint, protected=set(task.protected), python=self.python
+            self.sandbox,
+            state.checkpoint,
+            protected=set(task.protected),
+            python=self.python,
+            workdir=task.workdir,
         )
         messages: list[Message] = build_agent_messages(
             task.description,
-            files=sorted(set(task.editable) | set(task.context) | set(task.protected)),
+            files=[]
+            if task.repo_in_image
+            else sorted(set(task.editable) | set(task.context) | set(task.protected)),
+            workdir=task.workdir if task.repo_in_image else None,
             protected=sorted(task.protected),
             check_commands=[g.command for g in oracle.visible_gates()],
             results=state.results,
@@ -339,9 +367,8 @@ class Engine:
         files = dict(state.files)
         for path in ws.touched:
             try:
-                files[path] = (await self.sandbox.read(ws.checkpoint, workspace_path(path))).decode(
-                    errors="replace"
-                )
+                raw = await self.sandbox.read(ws.checkpoint, workspace_path(path, task.workdir))
+                files[path] = raw.decode(errors="replace")
             except Exception:  # deleted by a later command
                 files[path] = ""
         notes = [_tamper_note(attempt.tampered_files)] if attempt.tampered_files else []

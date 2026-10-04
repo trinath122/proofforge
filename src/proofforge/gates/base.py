@@ -26,8 +26,11 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def workspace_path(rel: str) -> str:
-    return f"{WORKDIR}/{rel.lstrip('/')}"
+def workspace_path(rel: str, workdir: str = WORKDIR) -> str:
+    """Absolute sandbox path for a task file. Absolute paths (e.g. `/tests/...`) pass through."""
+    if rel.startswith("/"):
+        return rel
+    return f"{workdir.rstrip('/')}/{rel}"
 
 
 class GateSpec(BaseModel):
@@ -55,6 +58,7 @@ class Oracle(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     gates: tuple[GateSpec, ...]
+    workdir: str = WORKDIR
     protected: dict[str, str] = Field(description="relative path -> original content")
     holdout: dict[str, str] = Field(default_factory=dict, description="relative path -> content")
 
@@ -66,6 +70,7 @@ class Oracle(BaseModel):
     def digest(self) -> str:
         payload = {
             "gates": [g.model_dump() for g in self.gates],
+            "workdir": self.workdir,
             "protected": self.protected_hashes,
             "holdout": {p: sha256(c.encode()) for p, c in sorted(self.holdout.items())},
         }
@@ -80,7 +85,7 @@ async def detect_tampering(sandbox: Sandbox, at: Checkpoint, oracle: Oracle) -> 
     tampered: list[str] = []
     for rel, expected in oracle.protected_hashes.items():
         try:
-            actual = sha256(await sandbox.read(at, workspace_path(rel)))
+            actual = sha256(await sandbox.read(at, workspace_path(rel, oracle.workdir)))
         except Exception:  # deleted or unreadable counts as tampered
             actual = "missing"
         if actual != expected:
@@ -96,14 +101,15 @@ async def run_gates(
     include_holdout: bool,
 ) -> list[GateResult]:
     """Run gates in parallel, each on a disposable copy with the original oracle files."""
-    restore = {workspace_path(p): c.encode() for p, c in oracle.protected.items()}
+    wd = oracle.workdir
+    restore = {workspace_path(p, wd): c.encode() for p, c in oracle.protected.items()}
     if include_holdout:
-        restore |= {workspace_path(p): c.encode() for p, c in oracle.holdout.items()}
+        restore |= {workspace_path(p, wd): c.encode() for p, c in oracle.holdout.items()}
     selected = [g for g in oracle.gates if include_holdout or g.kind == "visible"]
 
     async def one(gate: GateSpec) -> GateResult:
         res = await sandbox.run(
-            at, gate.command, files=restore, keep=False, timeout_s=gate.timeout_s
+            at, gate.command, files=restore, keep=False, timeout_s=gate.timeout_s, cwd=wd
         )
         return GateResult(
             name=gate.name,

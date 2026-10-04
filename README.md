@@ -82,6 +82,24 @@ uv run proofforge bench --suite realworld                                  # har
 uv run proofforge bench --strategy agent                                   # agent on every suite
 ```
 
+### SWE-bench Pro (HARD-51) and other Harbor suites
+
+ProofForge runs external [Harbor](https://github.com/laude-institute/harbor)-format tasks directly on
+Nebius sandboxes, including [SWE-bench Pro V2](https://github.com/scaleapi/SWE-bench_Pro-os) and its
+HARD-51 subset: real issues in large repositories (Ansible, Open Library, Teleport, Element, ...).
+The repository ships inside each task's public image; the official verifier is a hidden holdout gate
+the agent never sees, so the only way to pass is to fix the issue.
+
+```bash
+git clone -c core.autocrlf=false https://github.com/scaleapi/SWE-bench_Pro-os ../SWE-bench_Pro-os
+T=../SWE-bench_Pro-os/v2/tasks
+uv run proofforge bench --suite harbor --root $T --ids-file ../SWE-bench_Pro-os/v2/hard51_ids.txt --limit 3 --validate
+uv run proofforge bench --suite harbor --root $T --ids-file ../SWE-bench_Pro-os/v2/hard51_ids.txt --limit 1 --mode efficient
+```
+
+`--validate` is free: it proves on Nebius that each task fails as shipped and passes with the
+reference solution, before any model is called.
+
 ### Pipeline Doctor and PipelineBench
 
 Pipeline Doctor repairs broken data pipelines and proves each repair with data-quality gates: schema, nulls, uniqueness, golden rows, and reconciliation against the raw source. [PipelineBench](bench/pipelinebench/README.md) is the open set of broken pipelines it is measured on.
@@ -112,7 +130,7 @@ src/proofforge/
   sandbox/    Sandbox interface; ContreeSandbox (real) and LocalSandbox (tests only)
   gates/      Gate specs, frozen oracle, tamper detection, parallel gate runner
   engine/     Task schema, prompts, verification loop with branch search, agent tools
-  playbooks/  Pipeline Doctor and RealWorld case loaders, validation, sandbox-side checkers
+  playbooks/  Pipeline Doctor, RealWorld and Harbor (SWE-bench Pro) loaders, validation, checkers
   bench.py    Suite discovery (PipelineBench, RealWorld)
   receipts/   Receipt schema and JSON/Markdown writer
   cli.py      doctor, smoke, fix, solve, pipeline, bench

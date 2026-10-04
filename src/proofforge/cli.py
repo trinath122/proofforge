@@ -165,7 +165,7 @@ def solve(
     mode: Annotated[Mode | None, typer.Option()] = None,
     strategy: StrategyOption = None,
 ) -> None:
-    """Solve one PipelineBench or RealWorld case directory."""
+    """Solve one PipelineBench, RealWorld or Harbor (SWE-bench Pro) task directory."""
     settings = _settings(mode)
     _apply_strategy(settings, strategy)
     found = detect(case)
@@ -187,8 +187,17 @@ def pipeline(
 
 @app.command()
 def bench(
-    suite: Annotated[str, typer.Option(help="pipeline | realworld | all")] = "all",
+    *,
+    suite: Annotated[str, typer.Option(help="pipeline | realworld | all | harbor")] = "all",
     only: Annotated[list[str] | None, typer.Option("--case", help="run only these")] = None,
+    root: Annotated[
+        Path | None,
+        typer.Option(help="task directory for --suite harbor (e.g. SWE-bench Pro v2/tasks)"),
+    ] = None,
+    ids_file: Annotated[
+        Path | None, typer.Option(help="file with one task id per line (e.g. v2/hard51_ids.txt)")
+    ] = None,
+    limit: Annotated[int | None, typer.Option(help="run at most this many tasks")] = None,
     validate: Annotated[
         bool, typer.Option(help="no model calls: prove each case is broken and solvable")
     ] = False,
@@ -197,13 +206,22 @@ def bench(
 ) -> None:
     """Run the benchmark suites and report solve rate, cost and time."""
     load_dotenv()
-    if suite not in ("pipeline", "realworld", "all"):
-        console.print("[red]--suite must be pipeline, realworld or all[/red]")
+    if suite not in ("pipeline", "realworld", "all", "harbor"):
+        console.print("[red]--suite must be pipeline, realworld, all or harbor[/red]")
         raise typer.Exit(2)
     suites: tuple[SuiteName, ...] = SUITES if suite == "all" else (suite,)  # type: ignore[assignment]
-    selected = discover(suites, only=only)
+    roots: dict[SuiteName, Path] = {"harbor": root} if root else {}
+    selected = discover(suites, roots=roots, only=only)
+    if ids_file:
+        wanted = [
+            ln.strip() for ln in ids_file.read_text(encoding="utf-8").splitlines() if ln.strip()
+        ]
+        order = {name: i for i, name in enumerate(wanted)}
+        selected = sorted((c for c in selected if c.name in order), key=lambda c: order[c.name])
+    if limit is not None:
+        selected = selected[:limit]
     if not selected:
-        console.print("[red]No cases found. Run from the repository root.[/red]")
+        console.print("[red]No cases found. Run from the repository root (or check --root).[/red]")
         raise typer.Exit(2)
 
     if validate:

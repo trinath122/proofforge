@@ -19,8 +19,10 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from proofforge.engine.task import FixTask
-from proofforge.gates.base import GateResult, GateSpec, run_gates, workspace_path
-from proofforge.sandbox.base import NOOP, Sandbox
+from proofforge.gates.base import TAIL_CHARS, GateResult, GateSpec, run_gates, workspace_path
+from proofforge.sandbox.base import Sandbox
+
+SETUP_TIMEOUT_S = 1800
 
 ASSETS = files("proofforge.playbooks.assets")
 RUNNER = "run_pipeline.py"
@@ -99,9 +101,24 @@ class CaseValidation(BaseModel):
 
 
 async def _gate_run(sandbox: Sandbox, task: FixTask) -> list[GateResult]:
+    """Seed and set up the task, then run every gate (visible and hidden). No model calls."""
     base = await sandbox.base(task.image)
-    seed = {workspace_path(p): c.encode() for p, c in task.workspace_seed().items()}
-    setup = await sandbox.run(base, NOOP, files=seed)
+    seed = {workspace_path(p, task.workdir): c.encode() for p, c in task.workspace_seed().items()}
+    setup = await sandbox.run(
+        base, task.setup_command, files=seed, cwd=task.workdir, timeout_s=SETUP_TIMEOUT_S
+    )
+    if not setup.ok:
+        return [
+            GateResult(
+                name="setup",
+                kind="visible",
+                passed=False,
+                exit_code=setup.exit_code,
+                stdout_tail=setup.stdout[-TAIL_CHARS:],
+                stderr_tail=setup.stderr[-TAIL_CHARS:],
+                elapsed_s=setup.elapsed_s,
+            )
+        ]
     return await run_gates(sandbox, setup.checkpoint, task.oracle(), include_holdout=True)
 
 

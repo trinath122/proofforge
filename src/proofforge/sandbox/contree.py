@@ -31,7 +31,9 @@ class ContreeSandbox:
         return await self._client.get_token_info()
 
     async def base(self, image_ref: str) -> Checkpoint:
-        image = await self._client.images.use(image_ref)
+        # Reuses an image already in the project, or imports it from its registry
+        # (Docker Hub, GHCR, ...) on first use.
+        image = await self._client.images.oci(image_ref, timeout=1800)
         key = str(image.uuid or f"tag:{image.tag}")
         self._images[key] = image
         return Checkpoint(id=key)
@@ -44,11 +46,12 @@ class ContreeSandbox:
         files: dict[str, bytes] | None = None,
         keep: bool = True,
         timeout_s: int = 300,
+        cwd: str = WORKDIR,
     ) -> ExecResult:
         image = self._images[at.id]
         started = time.monotonic()
         child = await image.run(  # noqa: S604 - executes inside an isolated sandbox VM
-            shell=f"mkdir -p {WORKDIR} && cd {WORKDIR} && {command}",
+            shell=f"mkdir -p {cwd} && cd {cwd} && {command}",
             files=dict(files or {}),
             disposable=not keep,
             timeout=timeout_s,

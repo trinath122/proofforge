@@ -47,8 +47,9 @@ class Sandbox(Protocol):
         files: dict[str, bytes] | None = None,
         keep: bool = True,
         timeout_s: int = 300,
+        cwd: str = WORKDIR,
     ) -> ExecResult:
-        """Run a shell command in WORKDIR at a checkpoint.
+        """Run a shell command in `cwd` (created if missing) at a checkpoint.
 
         `files` maps absolute paths to contents written before the command runs.
         With keep=True the resulting filesystem becomes a new checkpoint;

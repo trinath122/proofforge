@@ -112,13 +112,19 @@ def test_task_validation() -> None:
         FixTask(
             title="x", description="x", editable={"t.py": ""}, protected={"t.py": ""}, gates=[gate]
         )
-    with pytest.raises(ValidationError, match="visible gate"):
-        FixTask(
-            title="x",
-            description="x",
-            editable={"a.py": ""},
-            gates=[GateSpec(name="h", command="true", kind="holdout")],
-        )
+    with pytest.raises(ValidationError, match="at least one gate"):
+        FixTask(title="x", description="x", editable={"a.py": ""}, gates=[])
+    with pytest.raises(ValidationError, match="no editable files"):
+        FixTask(title="x", description="x", gates=[gate])
+    hidden = FixTask(
+        title="x",
+        description="x",
+        repo_in_image=True,
+        workdir="/app",
+        gates=[GateSpec(name="h", command="true", kind="holdout")],
+    )
+    assert hidden.hidden_only
+    assert hidden.oracle().workdir == "/app"
     with pytest.raises(ValidationError, match="no holdout gate"):
         FixTask(
             title="x", description="x", editable={"a.py": ""}, holdout={"h.py": ""}, gates=[gate]

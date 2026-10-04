@@ -22,9 +22,13 @@ class LocalSandbox:
         self._dirs: dict[str, Path] = {}
 
     def _host_path(self, at: Checkpoint, path: str) -> Path:
-        rel = path.removeprefix(WORKDIR) if path.startswith(WORKDIR) else path
-        rel = rel.lstrip("/")
-        return self._dirs[at.id] / rel
+        """WORKDIR maps to the snapshot root; any other absolute path lives under it."""
+        rel = (
+            path.removeprefix(WORKDIR)
+            if path.startswith(WORKDIR + "/") or path == WORKDIR
+            else path
+        )
+        return self._dirs[at.id] / rel.lstrip("/")
 
     async def base(self, image_ref: str) -> Checkpoint:
         cp = Checkpoint(id=f"base-{uuid.uuid4().hex[:8]}")
@@ -40,6 +44,7 @@ class LocalSandbox:
         files: dict[str, bytes] | None = None,
         keep: bool = True,
         timeout_s: int = 300,
+        cwd: str = WORKDIR,
     ) -> ExecResult:
         new = Checkpoint(id=f"cp-{uuid.uuid4().hex[:8]}", parent=at.id)
         workdir = self._root / new.id
@@ -53,7 +58,7 @@ class LocalSandbox:
         code, out, err = (
             (0, b"", b"")
             if command.strip() == NOOP
-            else (await self._exec(command, workdir, timeout_s))
+            else (await self._exec(command, self._cwd(new, cwd), timeout_s))
         )
         result = ExecResult(
             checkpoint=new if keep else at,
@@ -66,6 +71,11 @@ class LocalSandbox:
             shutil.rmtree(workdir)
             del self._dirs[new.id]
         return result
+
+    def _cwd(self, at: Checkpoint, cwd: str) -> Path:
+        path = self._host_path(at, cwd)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @staticmethod
     async def _exec(command: str, cwd: Path, timeout_s: int) -> tuple[int, bytes, bytes]:

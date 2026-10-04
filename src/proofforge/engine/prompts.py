@@ -137,13 +137,23 @@ def build_agent_messages(
     results: list[GateResult],
     notes: Iterable[str] = (),
     previous_summary: str = "",
+    workdir: str | None = None,
 ) -> list[Message]:
+    workspace = (
+        f"## Repository\nThe repository is at `{workdir}`, your working directory. It is large: "
+        "use `list_files` and `search` to find the relevant code before reading files."
+        if workdir
+        else "## Workspace files\n" + "\n".join(f"- {p}" for p in sorted(files))
+    )
     sections = [
         f"# Task\n{description}",
-        "## Workspace files\n" + "\n".join(f"- {p}" for p in sorted(files)),
+        workspace,
         "## Frozen verification files (read-only)\n"
         + ("\n".join(f"- {p}" for p in sorted(protected)) or "- none"),
-        "## Checks you can run yourself\n" + "\n".join(f"```\n{c}\n```" for c in check_commands),
+        "## Checks you can run yourself\n" + "\n".join(f"```\n{c}\n```" for c in check_commands)
+        if check_commands
+        else "## Checks\nNo checks are provided. Find or write a way to reproduce the problem "
+        "with the project's own test tooling, then verify your change. Hidden tests decide.",
         _gate_block(results),
     ]
     if previous_summary:

@@ -12,7 +12,7 @@ import posixpath
 from typing import Any
 
 from proofforge.gates.base import workspace_path
-from proofforge.sandbox.base import NOOP, Checkpoint, Sandbox
+from proofforge.sandbox.base import NOOP, WORKDIR, Checkpoint, Sandbox
 
 OUTPUT_LIMIT = 6000
 READ_LINE_LIMIT = 400
@@ -145,9 +145,11 @@ class PathError(ValueError):
     pass
 
 
-def normalize(path: str) -> str:
+def normalize(path: str, workdir: str = WORKDIR) -> str:
     """Workspace-relative POSIX path; refuses anything that escapes the workspace."""
-    raw = path.strip().removeprefix("/workspace/").removeprefix("./")
+    raw = path.strip()
+    root = workdir.rstrip("/")
+    raw = "." if raw == root else raw.removeprefix(root + "/").removeprefix("./")
     if raw.startswith("/"):
         raise PathError(f"absolute paths outside the workspace are not allowed: {path}")
     norm = posixpath.normpath(raw or ".")
@@ -166,14 +168,19 @@ class Workspace:
         protected: set[str],
         *,
         python: str = "python3",
+        workdir: str = WORKDIR,
     ) -> None:
         self.sandbox = sandbox
+        self.workdir = workdir
         self.python = python
         self.checkpoint = checkpoint
         self.protected = protected
         self.touched: set[str] = set()
         self.refused: list[str] = []
         self.summary = ""
+
+    def _path(self, rel: str) -> str:
+        return workspace_path(rel, self.workdir)
 
     async def call(self, name: str, raw_args: str) -> tuple[str, bool]:
         """Execute one tool call. Returns (observation, submitted)."""
@@ -197,7 +204,9 @@ class Workspace:
     async def _exec(
         self, command: str, *, keep: bool, timeout_s: int = RUN_TIMEOUT_S
     ) -> tuple[int, str, bool]:
-        res = await self.sandbox.run(self.checkpoint, command, keep=keep, timeout_s=timeout_s)
+        res = await self.sandbox.run(
+            self.checkpoint, command, keep=keep, timeout_s=timeout_s, cwd=self.workdir
+        )
         if keep:
             self.checkpoint = res.checkpoint
         out = res.stdout + (f"\n[stderr]\n{res.stderr}" if res.stderr.strip() else "")
@@ -209,11 +218,12 @@ class Workspace:
             self.checkpoint,
             f"{self.python} {HELPER}",
             files={
-                workspace_path(HELPER): _HELPER_SRC.encode(),
-                workspace_path(HELPER_ARGS): json.dumps(args).encode(),
+                self._path(HELPER): _HELPER_SRC.encode(),
+                self._path(HELPER_ARGS): json.dumps(args).encode(),
             },
             keep=False,
             timeout_s=RUN_TIMEOUT_S,
+            cwd=self.workdir,
         )
         if res.exit_code != 0:
             return f"ERROR: tool failed (exit {res.exit_code}): {res.stderr.strip()[-500:]}"
@@ -221,15 +231,15 @@ class Workspace:
 
     async def _tool_list_files(self, path: str = ".", max_depth: int = 3) -> tuple[str, bool]:
         depth = max(1, min(int(max_depth), 6))
-        out = await self._helper(op="list", path=normalize(path), max_depth=depth)
+        out = await self._helper(op="list", path=normalize(path, self.workdir), max_depth=depth)
         return _clip(out) or "(no files)", False
 
     async def _tool_read_file(
         self, path: str, start_line: int = 1, end_line: int = 0
     ) -> tuple[str, bool]:
-        rel = normalize(path)
+        rel = normalize(path, self.workdir)
         try:
-            text = (await self.sandbox.read(self.checkpoint, workspace_path(rel))).decode(
+            text = (await self.sandbox.read(self.checkpoint, self._path(rel))).decode(
                 errors="replace"
             )
         except Exception:
@@ -243,7 +253,7 @@ class Workspace:
         return _clip(f"{rel} ({len(lines)} lines)\n{body}{more}"), False
 
     async def _tool_search(self, pattern: str, path: str = ".") -> tuple[str, bool]:
-        out = await self._helper(op="search", pattern=pattern, path=normalize(path))
+        out = await self._helper(op="search", pattern=pattern, path=normalize(path, self.workdir))
         return _clip(out) or "(no matches)", False
 
     async def _tool_run(self, command: str, timeout_s: int = RUN_TIMEOUT_S) -> tuple[str, bool]:
@@ -267,19 +277,19 @@ class Workspace:
                 False,
             )
         res = await self.sandbox.run(
-            self.checkpoint, NOOP, files={workspace_path(rel): content.encode()}, keep=True
+            self.checkpoint, NOOP, files={self._path(rel): content.encode()}, keep=True
         )
         self.checkpoint = res.checkpoint
         self.touched.add(rel)
         return f"wrote {rel} ({len(content.splitlines())} lines)", False
 
     async def _tool_write_file(self, path: str, content: str) -> tuple[str, bool]:
-        return await self._write(normalize(path), content)
+        return await self._write(normalize(path, self.workdir), content)
 
     async def _tool_edit_file(self, path: str, old: str, new: str) -> tuple[str, bool]:
-        rel = normalize(path)
+        rel = normalize(path, self.workdir)
         try:
-            text = (await self.sandbox.read(self.checkpoint, workspace_path(rel))).decode()
+            text = (await self.sandbox.read(self.checkpoint, self._path(rel))).decode()
         except Exception:
             return f"ERROR: cannot read {rel}", False
         count = text.count(old) if old else 0
