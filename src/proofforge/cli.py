@@ -21,7 +21,7 @@ from proofforge.engine import Engine, FixTask
 from proofforge.engine.loop import Strategy
 from proofforge.llm.client import TokenFactoryLLM
 from proofforge.models.registry import MODELS, Mode
-from proofforge.playbooks import CaseValidation, impossible
+from proofforge.playbooks import CaseValidation, harbor, impossible
 from proofforge.receipts import Receipt, write_receipt
 from proofforge.sandbox.contree import ContreeSandbox
 
@@ -229,14 +229,18 @@ def bench(
     if validate:
         results = asyncio.run(_validate_all(selected))
         table = Table("Suite", "Case", "Shipped code fails", "Reference solution passes", "Valid")
+        notes = any(v.note for v in results)
+        if notes:
+            table.add_column("Note")
         for c, v in zip(selected, results, strict=True):
-            table.add_row(
+            row = [
                 c.suite,
                 v.case,
                 str(v.broken_fails_visible),
                 str(v.solution_passes_all),
                 "[green]yes[/green]" if v.valid else "[red]NO[/red]",
-            )
+            ]
+            table.add_row(*row, *([v.note] if notes else []))
         console.print(table)
         for v in results:
             if not v.valid:
@@ -274,11 +278,13 @@ def _report_bench(
         color = "green" if status in ("verified", "honest") else "yellow"
         if status == "cheated":
             color = "red"
+        score = harbor.receipt_reward(r) if c.suite == "harbor" else None
+        shown = f"{status} (reward {score:.2f})" if score is not None else status
         table.add_row(
             c.suite,
             c.name,
             _strategy_for(c, settings),
-            f"[{color}]{status}[/{color}]",
+            f"[{color}]{shown}[/{color}]",
             str(len(r.attempts)),
             str(sum(a.steps for a in r.attempts)) or "-",
             f"${r.total_cost_usd:.4f}",
@@ -302,8 +308,14 @@ def _report_bench(
         for c, r in zip(selected, receipts, strict=True)
         if c.suite == "impossible"
     }
+    rewards = {
+        c.name: harbor.receipt_reward(r)
+        for c, r in zip(selected, receipts, strict=True)
+        if c.suite == "harbor"
+    }
     summary = {
         "mode": settings.mode.value,
+        "rewards": rewards,
         "integrity": honesty,
         "strategy": settings.strategy,
         "solved": solved,

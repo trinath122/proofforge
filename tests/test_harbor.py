@@ -50,13 +50,42 @@ def test_loader_rejects_docker_builds_and_finds_workdir(tmp_path: Path) -> None:
         "A code repository is available in the `/testbed` directory."
     )
     assert harbor.load_task(task).workdir == "/testbed"
+    (task / "task.toml").write_text("[verifier]\ntimeout_sec = 10\n")  # no published image
     (task / "environment" / "Dockerfile").write_text("FROM ubuntu:24.04\nRUN apt-get update\n")
     with pytest.raises(harbor.HarborError, match="Docker build"):
         harbor.load_task(task)
     (task / "environment" / "Dockerfile").unlink()
-    (task / "task.toml").write_text("[verifier]\ntimeout_sec = 10\n")
     with pytest.raises(harbor.HarborError, match="no docker image"):
         harbor.load_task(task)
+
+
+def test_loader_uses_published_image_for_built_environments(tmp_path: Path) -> None:
+    # Long-Horizon Terminal-Bench: a full Dockerfile, plus the image it was published as.
+    task = tmp_path / "lhtb"
+    shutil.copytree(TASK, task)
+    (task / "instruction.md").write_text("Edit /work/app/policy.py.")
+    (task / "environment" / "Dockerfile").write_text(
+        "FROM python:3.11-slim\nRUN pip install numpy\nWORKDIR /tmp\nWORKDIR /work/app/\n"
+    )
+    toml = '[verifier]\ntimeout_sec = 300\n[environment]\ndocker_image = "{}"\n'
+    (task / "task.toml").write_text(toml.format("someone/lhtb-x:20260615"))
+    loaded = harbor.load_task(task)
+    assert loaded.image == "docker.io/someone/lhtb-x:20260615"
+    assert loaded.workdir == "/work/app"
+    (task / "task.toml").write_text(toml.format("ghcr.io/org/img:1"))
+    assert harbor.load_task(task).image == "ghcr.io/org/img:1"
+    (task / "task.toml").write_text(toml.format("ubuntu:24.04"))
+    assert harbor.load_task(task).image == "docker.io/library/ubuntu:24.04"
+    separate = '[verifier]\nenvironment_mode = "separate"\n[environment]\ndocker_image = "a/b:1"\n'
+    (task / "task.toml").write_text(separate)
+    with pytest.raises(harbor.HarborError, match="own image"):
+        harbor.load_task(task)
+
+
+def test_reward_is_read_from_gate_output() -> None:
+    assert harbor.reward("...\nharbor reward: 0.625\n") == 0.625
+    assert harbor.reward("harbor reward: none") is None
+    assert harbor.reward("no verifier ran") is None
 
 
 def test_suite_discovery(tmp_path: Path) -> None:

@@ -100,6 +100,12 @@ uv run proofforge bench --suite harbor --root $T --ids-file ../SWE-bench_Pro-os/
 `--validate` is free: it proves on Nebius that each task fails as shipped and passes with the
 reference solution, before any model is called.
 
+### Long-Horizon Terminal-Bench
+
+Six tasks from [Long-Horizon Terminal-Bench](https://github.com/zli12321/LHTB) run through the
+same Harbor adapter, on each task's published image, graded by its hidden dense-reward
+verifier. See [bench/lhtb](bench/lhtb/README.md).
+
 ### Cheating test: impossible tasks
 
 Coding agents are known to game tests when they cannot meet them. `bench/impossible/` holds

@@ -94,6 +94,7 @@ class CaseValidation(BaseModel):
     broken_fails_visible: bool
     solution_passes_all: bool
     solution_gates: list[GateResult]
+    note: str = ""
 
     @property
     def valid(self) -> bool:

@@ -9,6 +9,8 @@ rem   pf hard [N] [mode] [ids] paid: solve the first N HARD-51 tasks (default 1,
 rem                           caps: $1.50 per task, 80 agent steps, 2 rounds)
 rem   pf cheat-validate       free: prove the impossible tasks contradict their spec
 rem   pf cheat [mode] [case] [case]  paid: run the cheating test (default efficient, ~$1)
+rem   pf lhtb-validate          free: check the Long-Horizon Terminal-Bench tasks load and grade
+rem   pf lhtb [mode] [task]     paid: run LHTB (one task: ~$1.5 cap; all: $8 cap)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
 chcp 65001 >nul
@@ -45,6 +47,17 @@ set "CASES="
 if /i "%STEP%"=="cheat" if not "%~3"=="" set "CASES= --case %~3"
 if /i "%STEP%"=="cheat" if not "%~4"=="" set "CASES=%CASES% --case %~4"
 if /i "%STEP%"=="cheat" set "RUN=uv run python -m proofforge bench --suite impossible --mode %MODE%%CASES%"
+rem Long-Horizon Terminal-Bench: published task images, dense 0..1 reward.
+set "LHTB=external\LHTB\tasks"
+if /i "%STEP%"=="lhtb-validate" set "RUN=uv run python -m proofforge bench --suite harbor --root %LHTB% --ids-file bench\lhtb\ids.txt --validate"
+if /i "%STEP%"=="lhtb" if not "%~2"=="" set "MODE=%~2"
+if /i "%STEP%"=="lhtb" set "PROOFFORGE_MAX_AGENT_STEPS=120"
+if /i "%STEP%"=="lhtb" set "PROOFFORGE_MAX_FIX_ATTEMPTS=2"
+if /i "%STEP%"=="lhtb" set "PROOFFORGE_TASK_BUDGET_USD=1.5"
+if /i "%STEP%"=="lhtb" set "PROOFFORGE_SESSION_BUDGET_USD=3"
+if /i "%STEP%"=="lhtb" if "%~3"=="" set "PROOFFORGE_SESSION_BUDGET_USD=8"
+if /i "%STEP%"=="lhtb" if not "%~3"=="" set "CASES= --case %~3"
+if /i "%STEP%"=="lhtb" set "RUN=uv run python -m proofforge bench --suite harbor --root %LHTB% --ids-file bench\lhtb\ids.txt --mode %MODE%%CASES%"
 if /i "%STEP%"=="cheat-validate" set "RUN=uv run python -m proofforge bench --suite impossible --validate"
 if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
 echo ^> %RUN%
