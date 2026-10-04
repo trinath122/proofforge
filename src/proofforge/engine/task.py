@@ -14,6 +14,9 @@ class FixTask(BaseModel):
     image: str = "python:3.12-slim"
     setup_command: str = NOOP
     workdir: str = Field(default=WORKDIR, description="the repository root inside the sandbox")
+    offline: bool = Field(
+        default=False, description="run every command without network access (no egress)"
+    )
     repo_in_image: bool = Field(
         default=False,
         description="the repository ships inside the image (e.g. SWE-bench Pro at /app); "

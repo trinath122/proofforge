@@ -9,6 +9,7 @@ becomes the next round's starting point and its visible failures become feedback
 from __future__ import annotations
 
 import asyncio
+import copy
 import difflib
 import json
 import time
@@ -34,6 +35,7 @@ from proofforge.llm.base import LLM, Message
 from proofforge.models.registry import Mode, Role
 from proofforge.receipts.schema import Attempt, ModelUsage, Receipt, Status
 from proofforge.sandbox.base import NOOP, Checkpoint, Sandbox
+from proofforge.sandbox.offline import OfflineSandbox
 
 
 @dataclass
@@ -113,6 +115,13 @@ class Engine:
         self.python = python  # interpreter inside the sandbox, used by the agent's tools
 
     async def fix(self, task: FixTask) -> Receipt:
+        if task.offline and not isinstance(self.sandbox, OfflineSandbox):
+            sealed = copy.copy(self)
+            sealed.sandbox = OfflineSandbox(self.sandbox)
+            return await sealed._fix(task)
+        return await self._fix(task)
+
+    async def _fix(self, task: FixTask) -> Receipt:
         started = time.monotonic()
         self.budget.start_task()
         oracle = task.oracle()

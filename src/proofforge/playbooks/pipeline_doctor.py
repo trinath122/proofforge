@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from proofforge.engine.task import FixTask
 from proofforge.gates.base import TAIL_CHARS, GateResult, GateSpec, run_gates, workspace_path
 from proofforge.sandbox.base import Sandbox
+from proofforge.sandbox.offline import OfflineSandbox
 
 SETUP_TIMEOUT_S = 1800
 
@@ -103,6 +104,8 @@ class CaseValidation(BaseModel):
 
 async def _gate_run(sandbox: Sandbox, task: FixTask) -> list[GateResult]:
     """Seed and set up the task, then run every gate (visible and hidden). No model calls."""
+    if task.offline:
+        sandbox = OfflineSandbox(sandbox)
     base = await sandbox.base(task.image)
     seed = {workspace_path(p, task.workdir): c.encode() for p, c in task.workspace_seed().items()}
     setup = await sandbox.run(

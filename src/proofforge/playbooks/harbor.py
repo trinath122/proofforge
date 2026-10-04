@@ -28,22 +28,28 @@ from proofforge.sandbox.base import Sandbox
 MAX_GATE_TIMEOUT_S = 3600
 DEFAULT_WORKDIR = "/app"
 
-# Runs the task's verifier and turns Harbor's reward file into a pass/fail exit code. The
+
+# Runs the task's verifier and turns Harbor's reward file into a pass/fail exit code (the
+# reward must reach `target`: 1.0, or the task's reference score for dense rewards). The
 # output ends with a short diagnostic (pass counts and the test runner's own tail) so
 # receipts explain a failure; agents never see holdout output, only how many checks failed.
-VERIFY = (
-    "mkdir -p /logs/verifier; bash /tests/test.sh > /tmp/pf_verifier.log 2>&1; code=$?; "
-    "echo '--- verifier summary'; "
-    "grep -E '^(Required tests|Passed tests|RESULT)' /tmp/pf_verifier.log || "
-    "tail -c 1500 /tmp/pf_verifier.log; "
-    "echo '--- test runner output (tail)'; "
-    "tail -c 2000 /logs/verifier/run-script-stdout.txt 2>/dev/null; "
-    "tail -c 600 /logs/verifier/run-script-stderr.txt 2>/dev/null; "
-    "r=$(cat /logs/verifier/reward.txt 2>/dev/null || true); "
-    'echo "harbor reward: ${r:-none}"; '
-    'if [ -n "$r" ]; then awk -v r="$r" \'BEGIN { exit !(r + 0 >= 1) }\'; '
-    "else exit $code; fi"
-)
+def verify_command(target: float = 1.0) -> str:
+    return (
+        "mkdir -p /logs/verifier; bash /tests/test.sh > /tmp/pf_verifier.log 2>&1; code=$?; "
+        "echo '--- verifier summary'; "
+        "grep -E '^(Required tests|Passed tests|RESULT)' /tmp/pf_verifier.log || "
+        "tail -c 1500 /tmp/pf_verifier.log; "
+        "echo '--- test runner output (tail)'; "
+        "tail -c 2000 /logs/verifier/run-script-stdout.txt 2>/dev/null; "
+        "tail -c 600 /logs/verifier/run-script-stderr.txt 2>/dev/null; "
+        "r=$(cat /logs/verifier/reward.txt 2>/dev/null || true); "
+        'echo "harbor reward: ${r:-none}"; '
+        f'if [ -n "$r" ]; then awk -v r="$r" \'BEGIN {{ exit !(r + 0 >= {target}) }}\'; '
+        "else exit $code; fi"
+    )
+
+
+VERIFY = verify_command()
 
 
 class HarborError(ValueError):
@@ -131,7 +137,14 @@ def reward(output: str) -> float | None:
         return None
 
 
-def load_task(task_dir: Path, *, use_solution: bool = False) -> FixTask:
+def _offline(meta: dict[str, object]) -> bool:
+    env = meta.get("environment")
+    return isinstance(env, dict) and env.get("allow_internet") is False
+
+
+def load_task(
+    task_dir: Path, *, use_solution: bool = False, reward_target: float | None = None
+) -> FixTask:
     meta = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
     instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
     verifier = meta.get("verifier", {})
@@ -143,13 +156,14 @@ def load_task(task_dir: Path, *, use_solution: bool = False) -> FixTask:
         image=_image(task_dir, meta),
         workdir=_workdir(task_dir, instruction),
         repo_in_image=True,
+        offline=_offline(meta),
         setup_command="bash /solution/solve.sh" if solution else "true",
         context=solution,
         holdout=_texts(task_dir / "tests", "/tests"),
         gates=[
             GateSpec(
                 name="harbor-verifier",
-                command=VERIFY,
+                command=verify_command(1.0 if reward_target is None else reward_target),
                 kind="holdout",
                 timeout_s=max(60, min(timeout, MAX_GATE_TIMEOUT_S)),
             )
@@ -165,16 +179,21 @@ def discover_tasks(root: Path, ids: list[str] | None = None) -> list[Path]:
     return tasks
 
 
-async def validate_task(sandbox: Sandbox, task_dir: Path) -> CaseValidation:
+async def validate_task(
+    sandbox: Sandbox, task_dir: Path, *, reward_target: float | None = None
+) -> CaseValidation:
     """Free: the verifier must fail as shipped and pass with the reference solution."""
-    broken = await _gate_run(sandbox, load_task(task_dir))
-    solved = await _gate_run(sandbox, load_task(task_dir, use_solution=True))
+    broken = await _gate_run(sandbox, load_task(task_dir, reward_target=reward_target))
+    solved = await _gate_run(
+        sandbox, load_task(task_dir, use_solution=True, reward_target=reward_target)
+    )
     return CaseValidation(
         case=task_dir.name,
         broken_fails_visible=not all(g.passed for g in broken),
         solution_passes_all=all(g.passed for g in solved),
         solution_gates=solved,
-        note=f"reward {_fmt(gates_reward(broken))} -> {_fmt(gates_reward(solved))}",
+        note=f"reward {_fmt(gates_reward(broken))} -> {_fmt(gates_reward(solved))}"
+        + (f" (target {reward_target:.2f})" if reward_target is not None else ""),
     )
 
 

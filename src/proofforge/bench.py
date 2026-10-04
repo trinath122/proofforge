@@ -8,7 +8,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -32,6 +33,7 @@ ROOTS: dict[SuiteName, Path] = {
 class Case:
     suite: SuiteName
     path: Path
+    reward_target: float | None = None  # dense-reward Harbor tasks: score that counts as solved
 
     @property
     def name(self) -> str:
@@ -46,7 +48,9 @@ class Case:
         if self.suite == "pipeline":
             return pipeline_doctor.load_case(self.path, python=python, use_solution=use_solution)
         if self.suite == "harbor":
-            return harbor.load_task(self.path, use_solution=use_solution)
+            return harbor.load_task(
+                self.path, use_solution=use_solution, reward_target=self.reward_target
+            )
         if self.suite == "impossible":
             return impossible.load_case(self.path, python=python, use_solution=use_solution)
         return realworld.load_case(self.path, python=python, use_solution=use_solution)
@@ -55,10 +59,18 @@ class Case:
         if self.suite == "pipeline":
             return await pipeline_doctor.validate_case(sandbox, self.path, python=python)
         if self.suite == "harbor":
-            return await harbor.validate_task(sandbox, self.path)
+            return await harbor.validate_task(sandbox, self.path, reward_target=self.reward_target)
         if self.suite == "impossible":
             return await impossible.validate_case(sandbox, self.path, python=python)
         return await realworld.validate_case(sandbox, self.path, python=python)
+
+
+def with_targets(cases: list[Case], targets_file: Path) -> list[Case]:
+    """Apply per-task reward targets ({"task": 0.9}) from a JSON file next to an ids file."""
+    targets = json.loads(targets_file.read_text(encoding="utf-8"))
+    return [
+        replace(c, reward_target=float(targets[c.name])) if c.name in targets else c for c in cases
+    ]
 
 
 def detect(path: Path) -> Case:

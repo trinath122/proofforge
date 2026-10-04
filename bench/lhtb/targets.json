@@ -1,0 +1,8 @@
+{
+  "great-expectations-audit": 1.0,
+  "spot-scheduler-traces": 0.9,
+  "grammar-fuzz-coverage-hunt": 0.88,
+  "vector-db-iterative-build": 0.8,
+  "tabular-data-feature-covshift": 0.38,
+  "commit0-multilib-tdd": 1.0
+}

@@ -9,6 +9,16 @@ verifier is a holdout gate the agent never sees, and on a retry the agent only l
 the check failed (LHTB's own "binary rejection" rule). A task counts as verified only at
 reward 1.0; the best reward reached is reported either way.
 
+LHTB forbids internet access (a reimplement-the-library task is trivially "solved" by
+downloading the library). Token Factory sandboxes are online, so for tasks with
+`allow_internet = false` ProofForge runs every command, the agent's and the verifier's,
+in a private network namespace with only loopback up. commit0's grader checks for egress
+and zeroes the reward if it finds any.
+
+Most LHTB rewards are dense and the reference solutions do not reach 1.0, so
+`targets.json` sets the bar per task: the score the task's own reference solution reached
+in our sandbox, rounded down a little for run-to-run noise. Reaching it counts as solved.
+
 `ids.txt` lists the six tasks used here, chosen because they are software engineering
 problems that run as ordinary commands (no GUI, no separate verifier image):
 

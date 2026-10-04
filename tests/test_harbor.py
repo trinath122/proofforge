@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from proofforge.bench import Case, detect, discover
+from proofforge.bench import Case, detect, discover, with_targets
 from proofforge.budget import BudgetGuard
 from proofforge.engine.loop import Engine
 from proofforge.gates.base import GateSpec
@@ -76,10 +76,39 @@ def test_loader_uses_published_image_for_built_environments(tmp_path: Path) -> N
     assert harbor.load_task(task).image == "ghcr.io/org/img:1"
     (task / "task.toml").write_text(toml.format("ubuntu:24.04"))
     assert harbor.load_task(task).image == "docker.io/library/ubuntu:24.04"
+    assert not harbor.load_task(task).offline
+    (task / "task.toml").write_text(toml.format("a/b:1") + "allow_internet = false\n")
+    assert harbor.load_task(task).offline, "allow_internet = false seals the sandbox"
     separate = '[verifier]\nenvironment_mode = "separate"\n[environment]\ndocker_image = "a/b:1"\n'
     (task / "task.toml").write_text(separate)
     with pytest.raises(harbor.HarborError, match="own image"):
         harbor.load_task(task)
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not shutil.which("bash"), reason="needs bash")
+@pytest.mark.parametrize(
+    ("reward", "target", "passes"), [("0.91", 0.9, True), ("0.89", 0.9, False)]
+)
+def test_dense_reward_passes_at_its_target(
+    tmp_path: Path, reward: str, target: float, passes: bool
+) -> None:
+    tests, logs = tmp_path / "tests", tmp_path / "logs"
+    tests.mkdir()
+    (tests / "test.sh").write_text(f"echo {reward} > {logs}/verifier/reward.txt; exit 1")
+    command = harbor.verify_command(target)
+    command = command.replace("/tests/", f"{tests}/").replace("/logs/", f"{logs}/")
+    result = subprocess.run(["bash", "-c", command], capture_output=True, text=True, check=False)
+    assert (result.returncode == 0) == passes, result.stdout + result.stderr
+
+
+def test_targets_file_sets_the_bar(tmp_path: Path) -> None:
+    root = tmp_path / "tasks"
+    shutil.copytree(TASK, root / "mini_add")
+    targets = tmp_path / "targets.json"
+    targets.write_text('{"mini_add": 0.75}')
+    (case,) = with_targets(discover(("harbor",), roots={"harbor": root}), targets)
+    assert case.reward_target == 0.75
+    assert ">= 0.75" in case.load().gates[0].command
 
 
 def test_reward_is_read_from_gate_output() -> None:
