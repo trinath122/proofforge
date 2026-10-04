@@ -1,0 +1,31 @@
+@echo off
+rem ProofForge runner: one short command per live step. Output is also saved in runs\<step>.log
+rem so Claude can read the results directly.
+rem   pf test                 offline test suite
+rem   pf push                 git push
+rem   pf validate [N]         free: check the first N HARD-51 tasks on Nebius (default 3)
+rem   pf hard [N] [mode]      paid: solve the first N HARD-51 tasks (default 1, efficient)
+rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
+setlocal
+set "PATH=%USERPROFILE%\.local\bin;%PATH%"
+cd /d "%~dp0"
+if not exist runs mkdir runs
+set "COLUMNS=160"
+set "PYTHONIOENCODING=utf-8"
+set "TASKS=external\SWE-bench_Pro-os\v2\tasks"
+set "IDS=external\SWE-bench_Pro-os\v2\hard51_ids.txt"
+set "STEP=%~1"
+set "N=%~2"
+set "MODE=%~3"
+if not defined MODE set "MODE=efficient"
+set "RUN="
+if /i "%STEP%"=="test" set "RUN=uv run python -m pytest"
+if /i "%STEP%"=="push" set "RUN=git push"
+if /i "%STEP%"=="validate" (if not defined N set "N=3")
+if /i "%STEP%"=="validate" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --validate"
+if /i "%STEP%"=="hard" (if not defined N set "N=1")
+if /i "%STEP%"=="hard" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --mode %MODE%"
+if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
+echo ^> %RUN%
+powershell -NoProfile -Command "cmd /c %RUN% 2>&1 | Tee-Object -FilePath runs\%STEP%.log; exit $LASTEXITCODE"
+echo Saved output to runs\%STEP%.log
