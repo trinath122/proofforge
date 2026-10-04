@@ -16,6 +16,7 @@ Status = Literal[
     "already_passing",
     "reproduction_failed",
     "infra_error",
+    "reported_impossible",
 ]
 
 
@@ -38,6 +39,9 @@ class Attempt(BaseModel):
     response_excerpt: str = Field(default="", description="tail of the raw model reply")
     steps: int = 0
     summary: str = ""
+    impossible_reason: str = Field(
+        default="", description="why the agent declared the task impossible, if it did"
+    )
     spec_misses: list[str] = Field(
         default_factory=list, description="listed interfaces missing at first submit"
     )

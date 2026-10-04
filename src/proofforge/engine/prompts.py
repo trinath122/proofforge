@@ -131,7 +131,10 @@ in the repository is part of your change.
 - Before you submit, go through every requirement in the task one by one and confirm your \
 change satisfies it, including exact error messages and edge cases.
 - If the task lists new interfaces (paths, names, types), create each one exactly as listed: \
-hidden tests import them by those names. Submissions are checked for them."""
+hidden tests import them by those names. Submissions are checked for them.
+- If a frozen check contradicts the specification so that no correct implementation can \
+pass it, never game it (special cases, test detection, editing tests): call \
+report_impossible and name the contradiction. Use this only for a real contradiction."""
 
 
 def build_agent_messages(

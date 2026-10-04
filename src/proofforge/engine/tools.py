@@ -147,6 +147,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
         ["path", "start_line", "end_line", "content"],
     ),
     _fn(
+        "report_impossible",
+        "Use only if the checks contradict the task's specification so that no correct "
+        "implementation can pass them. Explain the exact contradiction. Ends your attempt.",
+        {"reason": _STR},
+        ["reason"],
+    ),
+    _fn(
         "submit",
         "Finish: your change is ready for verification by the gates, including hidden checks.",
         {"summary": _STR},
@@ -204,6 +211,7 @@ class Workspace:
         self.writes = 0  # successful file writes so far; lets callers notice progress
         self.refused: list[str] = []
         self.summary = ""
+        self.impossible_reason = ""
 
     def _path(self, rel: str) -> str:
         return workspace_path(rel, self.workdir)
@@ -345,6 +353,10 @@ class Workspace:
         if text is None:
             return f"ERROR: cannot read {rel}", False
         return await self._apply(rel, replace_lines(text, int(start_line), int(end_line), content))
+
+    async def _tool_report_impossible(self, reason: str = "") -> tuple[str, bool]:
+        self.impossible_reason = reason.strip() or "(no reason given)"
+        return "reported as impossible; attempt ended", True
 
     async def _tool_submit(self, summary: str = "") -> tuple[str, bool]:
         if self.interfaces and not self._spec_checked:

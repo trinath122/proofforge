@@ -21,7 +21,7 @@ from proofforge.engine import Engine, FixTask
 from proofforge.engine.loop import Strategy
 from proofforge.llm.client import TokenFactoryLLM
 from proofforge.models.registry import MODELS, Mode
-from proofforge.playbooks import CaseValidation
+from proofforge.playbooks import CaseValidation, impossible
 from proofforge.receipts import Receipt, write_receipt
 from proofforge.sandbox.contree import ContreeSandbox
 
@@ -188,7 +188,9 @@ def pipeline(
 @app.command()
 def bench(
     *,
-    suite: Annotated[str, typer.Option(help="pipeline | realworld | all | harbor")] = "all",
+    suite: Annotated[
+        str, typer.Option(help="pipeline | realworld | all | harbor | impossible")
+    ] = "all",
     only: Annotated[list[str] | None, typer.Option("--case", help="run only these")] = None,
     root: Annotated[
         Path | None,
@@ -206,8 +208,8 @@ def bench(
 ) -> None:
     """Run the benchmark suites and report solve rate, cost and time."""
     load_dotenv()
-    if suite not in ("pipeline", "realworld", "all", "harbor"):
-        console.print("[red]--suite must be pipeline, realworld, all or harbor[/red]")
+    if suite not in ("pipeline", "realworld", "all", "harbor", "impossible"):
+        console.print("[red]--suite must be pipeline, realworld, all, harbor or impossible[/red]")
         raise typer.Exit(2)
     suites: tuple[SuiteName, ...] = SUITES if suite == "all" else (suite,)  # type: ignore[assignment]
     roots: dict[SuiteName, Path] = {"harbor": root} if root else {}
@@ -254,14 +256,29 @@ def bench(
     engine, budget = _engine(settings)
     receipts = asyncio.run(_run_all(engine, selected, settings))
     selected = selected[: len(receipts)]  # a provider outage can stop the run early
+    solved = _report_bench(selected, receipts, settings, suites, budget)
+    raise typer.Exit(0 if solved == len(receipts) else 1)
+
+
+def _report_bench(
+    selected: list[Case],
+    receipts: list[Receipt],
+    settings: Settings,
+    suites: tuple[SuiteName, ...],
+    budget: BudgetGuard,
+) -> int:
+    """Print the results table and write the run summary. Returns the number solved."""
     table = Table("Suite", "Case", "Strategy", "Status", "Attempts", "Steps", "Cost", "Time")
     for c, r in zip(selected, receipts, strict=True):
-        color = "green" if r.status == "verified" else "yellow"
+        status = impossible.integrity(r) if c.suite == "impossible" else r.status
+        color = "green" if status in ("verified", "honest") else "yellow"
+        if status == "cheated":
+            color = "red"
         table.add_row(
             c.suite,
             c.name,
             _strategy_for(c, settings),
-            f"[{color}]{r.status}[/{color}]",
+            f"[{color}]{status}[/{color}]",
             str(len(r.attempts)),
             str(sum(a.steps for a in r.attempts)) or "-",
             f"${r.total_cost_usd:.4f}",
@@ -280,8 +297,14 @@ def bench(
         }
         for s in suites
     }
+    honesty = {
+        c.name: impossible.integrity(r)
+        for c, r in zip(selected, receipts, strict=True)
+        if c.suite == "impossible"
+    }
     summary = {
         "mode": settings.mode.value,
+        "integrity": honesty,
         "strategy": settings.strategy,
         "solved": solved,
         "total": len(receipts),
@@ -292,11 +315,18 @@ def bench(
     }
     out = Path(settings.receipts_dir) / f"bench-{time.strftime('%Y%m%d-%H%M%S')}.json"
     out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if honesty:
+        counts = {k: list(honesty.values()).count(k) for k in ("honest", "gave_up", "cheated")}
+        console.print(
+            f"[bold]Impossible tasks:[/bold] {counts['honest']} honest, "
+            f"{counts['gave_up']} gave up, [red]{counts['cheated']} cheated[/red] "
+            f"(cheat rate {counts['cheated'] / len(honesty):.0%})"
+        )
     console.print(
         f"[bold]Solved {solved}/{len(receipts)}[/bold] in mode {settings.mode.value} for "
         f"${budget.session.cost_usd:.4f}. Summary: {out}"
     )
-    raise typer.Exit(0 if solved == len(receipts) else 1)
+    return solved
 
 
 async def _validate_all(selected: list[Case]) -> list[CaseValidation]:

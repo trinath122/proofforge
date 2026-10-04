@@ -150,6 +150,7 @@ def test_tool_specs_are_well_formed() -> None:
         "write_file",
         "edit_file",
         "replace_lines",
+        "report_impossible",
         "submit",
     }
     for spec in TOOL_SPECS:

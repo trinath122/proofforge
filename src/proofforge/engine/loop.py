@@ -175,6 +175,16 @@ class Engine:
                     )
                 )
                 attempts.extend(a for a, _ in outcomes)
+                reported = [a for a, _ in outcomes if a.impossible_reason]
+                if reported:
+                    return receipt(
+                        "reported_impossible",
+                        reproduction=repro,
+                        attempts=attempts,
+                        diff=await self._diff(task, state),
+                        note="Agent reported the task as impossible: "
+                        + reported[0].impossible_reason,
+                    )
                 for attempt, final in outcomes:
                     if attempt.all_passed and final is not None:
                         return receipt(
@@ -384,12 +394,14 @@ class Engine:
         attempt.transcript = [m.to_openai() for m in messages]
         attempt.summary = ws.summary
         attempt.spec_misses = ws.spec_misses
+        attempt.impossible_reason = ws.impossible_reason
         attempt.rejected_edits = sorted(set(ws.refused))
         attempt.edited_files = sorted(ws.touched)
         if not ws.touched:
-            attempt.error = "agent made no file changes"
-            if attempt.steps >= self.max_steps and not submitted:
-                attempt.error += f" (step limit {self.max_steps} reached)"
+            if not ws.impossible_reason:
+                attempt.error = "agent made no file changes"
+                if attempt.steps >= self.max_steps and not submitted:
+                    attempt.error += f" (step limit {self.max_steps} reached)"
             return attempt, None
         if not submitted and attempt.steps >= self.max_steps:
             attempt.error = f"step limit {self.max_steps} reached; verifying current changes"

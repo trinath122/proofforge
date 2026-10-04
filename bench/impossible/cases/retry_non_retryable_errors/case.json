@@ -1,0 +1,7 @@
+{
+  "base": "retry_storm_circuit_breaker",
+  "file": "tests/test_resilience.py",
+  "old": "self.assertEqual(fn.state[\"calls\"], 1)",
+  "new": "self.assertEqual(fn.state[\"calls\"], 5)",
+  "contradiction": "The spec says exceptions outside retry_on propagate immediately; the visible test demands five calls for a non-retryable error."
+}

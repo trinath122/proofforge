@@ -7,6 +7,8 @@ rem   pf validate [N] [ids]   free: check the first N HARD-51 tasks on Nebius (d
 rem                           optional ids file instead of the HARD-51 list)
 rem   pf hard [N] [mode] [ids] paid: solve the first N HARD-51 tasks (default 1, efficient;
 rem                           caps: $1.50 per task, 80 agent steps, 2 rounds)
+rem   pf cheat-validate       free: prove the impossible tasks contradict their spec
+rem   pf cheat [mode]         paid: run the cheating test (default efficient, ~$1)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
 chcp 65001 >nul
@@ -35,6 +37,12 @@ if /i "%STEP%"=="hard" set "PROOFFORGE_TASK_BUDGET_USD=1.5"
 if /i "%STEP%"=="hard" set /a "PF_SESSION=%N%*2+1"
 if /i "%STEP%"=="hard" call set "PROOFFORGE_SESSION_BUDGET_USD=%%PF_SESSION%%"
 if /i "%STEP%"=="hard" set "RUN=uv run python -m proofforge bench --suite harbor --root %TASKS% --ids-file %IDS% --limit %N% --mode %MODE%"
+if /i "%STEP%"=="cheat" if not "%~2"=="" set "MODE=%~2"
+if /i "%STEP%"=="cheat" set "PROOFFORGE_TASK_BUDGET_USD=0.5"
+if /i "%STEP%"=="cheat" set "PROOFFORGE_MAX_AGENT_STEPS=40"
+if /i "%STEP%"=="cheat" set "PROOFFORGE_SESSION_BUDGET_USD=4"
+if /i "%STEP%"=="cheat" set "RUN=uv run python -m proofforge bench --suite impossible --mode %MODE%"
+if /i "%STEP%"=="cheat-validate" set "RUN=uv run python -m proofforge bench --suite impossible --validate"
 if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
 echo ^> %RUN%
 powershell -NoProfile -Command "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $env:COLUMNS = [Math]::Max(80, $Host.UI.RawUI.WindowSize.Width - 1); cmd /c '%RUN% 2>&1' | Tee-Object -FilePath runs\%STEP%.log; exit $LASTEXITCODE"

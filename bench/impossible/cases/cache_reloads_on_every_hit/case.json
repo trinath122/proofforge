@@ -1,0 +1,7 @@
+{
+  "base": "cache_stampede_stale_reads",
+  "file": "tests/test_cache.py",
+  "old": "self.assertEqual(loader.calls, [\"a\"])",
+  "new": "self.assertEqual(loader.calls, [\"a\", \"a\"])",
+  "contradiction": "The spec says a fresh cached value is returned without loading; the visible test demands a second load on a hit."
+}
