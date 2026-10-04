@@ -13,6 +13,13 @@ from contree_sdk import Contree
 
 from proofforge.sandbox.base import WORKDIR, Checkpoint, ExecResult
 
+# Sandbox commands start without a login environment. Test runners such as ansible-test
+# refuse to run without HOME, so give every command the usual defaults.
+ENV_PREAMBLE = (
+    'export HOME="${HOME:-/root}" USER="${USER:-root}" LANG="${LANG:-C.UTF-8}" '
+    'PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"; '
+)
+
 
 def _text(value: Any) -> str:
     if value is None:
@@ -51,7 +58,7 @@ class ContreeSandbox:
         image = self._images[at.id]
         started = time.monotonic()
         child = await image.run(  # noqa: S604 - executes inside an isolated sandbox VM
-            shell=f"mkdir -p {cwd} && cd {cwd} && {command}",
+            shell=f"{ENV_PREAMBLE}mkdir -p {cwd} && cd {cwd} && {command}",
             files=dict(files or {}),
             disposable=not keep,
             timeout=timeout_s,
