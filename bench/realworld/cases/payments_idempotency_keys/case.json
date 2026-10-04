@@ -1,0 +1,11 @@
+{
+  "title": "Payment retries double-charge customers and leak receipts across accounts",
+  "difficulty": "hard",
+  "tags": ["system-design", "payments", "idempotency", "concurrency", "data-isolation"],
+  "issue": "Incident report: customers were charged twice when the mobile app retried a timed-out payment while the first request was still running. We also found a request returning another merchant's receipt, a retry for a different amount silently returning the old receipt, and invalid amounts reaching the gateway.\n\nFix `payments.PaymentService.charge` so it meets this contract (see also `README.md`; `payments/errors.py` defines the exceptions):\n\n- `charge(idempotency_key, account, amount_cents, currency)`. `amount_cents` must be an `int` > 0 (`bool` is not an amount), otherwise `ValueError`, and the gateway is not called. `currency` is a 3-letter code and is case-insensitive (`\"usd\"` and `\"USD\"` are the same currency); pass it to the gateway upper-cased.\n- Idempotency keys are scoped per account: the same key used by two different accounts is two independent requests.\n- The first request for an (account, key) calls `gateway.charge` exactly once. A later request with the same account, key, amount and currency replays the original outcome without calling the gateway: the same receipt, or the same `CardDeclined` error. A request with the same account and key but a different amount or currency raises `IdempotencyConflict` without calling the gateway.\n- Concurrent requests for the same (account, key) must result in exactly one gateway call; the others wait and receive the same outcome. Requests for different keys must not wait for each other.\n- A `GatewayError` is transient: it is raised to the caller (and to anyone waiting on that same request), nothing is stored, and a later retry with the same key calls the gateway again.\n- Stored outcomes expire `key_ttl` seconds after they were recorded (measured with `clock`); at exactly `key_ttl` the key is free again and a request is treated as new.\n- Thread safe.",
+  "protected": ["tests/*"],
+  "gates": [
+    {"name": "visible-tests", "command": "{python} -m unittest discover -s tests -t . -q", "timeout_s": 120},
+    {"name": "hidden-tests", "command": "{python} -m unittest discover -s hidden_tests -t . -q", "kind": "holdout", "timeout_s": 120}
+  ]
+}

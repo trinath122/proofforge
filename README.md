@@ -40,7 +40,7 @@ Retries escalate and never downgrade: a retry only happens after a proof (usuall
 
 ## Results
 
-RealWorld suite (hard multi-file cases: concurrency, reliability), tool-using agent, real Nebius sandboxes:
+RealWorld suite, first two cases (rate limiter, job queue), tool-using agent, real Nebius sandboxes. Runs on the full five-case suite are next:
 
 | Mode | Models | Solved | Cost | Wall time |
 | --- | --- | --- | --- | --- |
@@ -51,7 +51,9 @@ The larger model was cheaper *and* 3x faster: it needed 81 agent steps where Lig
 
 ## Quickstart
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/). If Windows Smart App Control blocks
+the `proofforge` or `pytest` launchers, use `uv run python -m proofforge ...` and
+`uv run python -m pytest` instead.
 
 ```bash
 git clone <this repo> && cd proofforge
@@ -115,7 +117,7 @@ src/proofforge/
   receipts/   Receipt schema and JSON/Markdown writer
   cli.py      doctor, smoke, fix, solve, pipeline, bench
 bench/pipelinebench/  Broken-pipeline cases with hidden holdout data
-bench/realworld/      Hard multi-file cases (concurrency, reliability, system components)
+bench/realworld/      5 hard system-design cases (rate limiting, job queues, caching, payments, resilience)
 ```
 
 ## Roadmap

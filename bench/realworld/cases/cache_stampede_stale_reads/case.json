@@ -1,0 +1,11 @@
+{
+  "title": "Pricing cache stampedes the database and serves stale prices",
+  "difficulty": "hard",
+  "tags": ["system-design", "caching", "concurrency", "single-flight", "invalidation"],
+  "issue": "Incident report: when a popular SKU's cache entry expires, hundreds of concurrent requests all hit the pricing database at once (a cache stampede) and it falls over. Separately, customers saw an old price for up to a full TTL after a price change, and hot keys get evicted while cold ones stay.\n\nFix `cachelib.TTLCache` so it meets its documented contract (also in `README.md`):\n\n- `TTLCache(loader, ttl, max_entries=1024, clock=None)`. `ttl` must be > 0 and `max_entries` >= 1, otherwise `ValueError`. `clock` is a zero-argument callable returning seconds (default `time.monotonic`).\n- `get(key)` returns the cached value if it is fresh, otherwise calls `loader(key)`, caches and returns the result. A value is fresh for `ttl` seconds measured from when its load finished; at exactly `ttl` seconds old it is expired. `None` is a valid value and is cached.\n- Single flight: concurrent `get` calls that miss on the same key share one `loader` call and all receive its result. Loads for different keys must run in parallel, and a loader may itself call `get` for other keys.\n- If `loader` raises, every caller waiting on that load gets the exception, nothing is cached, and the next `get` loads again.\n- `invalidate(key)` removes the key. A `get` that starts after `invalidate` returns must never receive or cache a value from a load that started before it; callers already waiting on that older load still receive its result.\n- Never hold more than `max_entries` entries; when full, evict the least recently used one (a `get` hit counts as a use). `len(cache)` returns the number of entries held.\n- Thread safe.",
+  "protected": ["tests/*"],
+  "gates": [
+    {"name": "visible-tests", "command": "{python} -m unittest discover -s tests -t . -q", "timeout_s": 120},
+    {"name": "hidden-tests", "command": "{python} -m unittest discover -s hidden_tests -t . -q", "kind": "holdout", "timeout_s": 120}
+  ]
+}

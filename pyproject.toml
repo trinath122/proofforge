@@ -66,6 +66,6 @@ addopts = "-q -m 'not live' --cov=proofforge --cov-report=term-missing --cov-fai
 markers = ["live: hits real Nebius APIs; run with `-m live` and credentials set"]
 
 [tool.coverage.run]
-omit = ["src/proofforge/cli.py", "src/proofforge/sandbox/contree.py", "src/proofforge/llm/client.py",
+omit = ["src/proofforge/cli.py", "src/proofforge/__main__.py", "src/proofforge/sandbox/contree.py", "src/proofforge/llm/client.py",
     "src/proofforge/playbooks/assets/*",  # run inside the sandbox; exercised via subprocess in tests
 ]
