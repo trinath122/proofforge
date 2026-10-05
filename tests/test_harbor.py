@@ -10,9 +10,10 @@ import pytest
 from proofforge.bench import Case, detect, discover, with_targets
 from proofforge.budget import BudgetGuard
 from proofforge.engine.loop import Engine
-from proofforge.gates.base import GateSpec
+from proofforge.gates.base import GateResult, GateSpec
 from proofforge.models.registry import Mode
 from proofforge.playbooks import harbor
+from proofforge.receipts.schema import Attempt, Receipt
 from proofforge.sandbox.local import LocalSandbox
 from tests.conftest import PY, ScriptedLLM, calls
 
@@ -200,3 +201,33 @@ def test_loader_keeps_crlf_in_test_data(tmp_path: Path) -> None:
     holdout = harbor.load_task(task).holdout
     assert holdout["/tests/fixture.patch"] == "+--boundary\r\n+Content-Type: text/plain\r\n"
     assert holdout["/tests/test.sh"] == "#!/bin/bash\necho ok\n", "shell scripts are normalized"
+
+
+def test_reported_reward_is_the_final_change_not_the_best_round() -> None:
+    def attempt(rnd: int, reward: str) -> Attempt:
+        gate = GateResult(
+            name="harbor-verifier",
+            kind="holdout",
+            passed=False,
+            exit_code=1,
+            stdout_tail=f"harbor reward: {reward}",
+            stderr_tail="",
+            elapsed_s=1.0,
+        )
+        return Attempt(
+            round=rnd, branch=0, model_key="m", checkpoint=None, edited_files=[], gates=[gate]
+        )
+
+    receipt = Receipt(
+        run_id="r",
+        task_title="t",
+        mode="efficient",
+        status="failed",
+        image="i",
+        base_checkpoint="b",
+        oracle_digest="",
+        protected_hashes={},
+        reproduction=[],
+        attempts=[attempt(1, "0.77"), attempt(2, "0.62")],
+    )
+    assert harbor.receipt_reward(receipt) == 0.62

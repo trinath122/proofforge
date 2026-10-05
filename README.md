@@ -104,7 +104,9 @@ reference solution, before any model is called.
 
 Six tasks from [Long-Horizon Terminal-Bench](https://github.com/zli12321/LHTB) run through the
 same Harbor adapter, on each task's published image, graded by its hidden dense-reward
-verifier. See [bench/lhtb](bench/lhtb/README.md).
+verifier. See [bench/lhtb](bench/lhtb/README.md) for results: with Nemotron Super the
+agent reached 82-87% of the reference score on two tasks and none reached its target.
+On the fuzzing task it claimed 0.846; the hidden verifier measured 0.62.
 
 ### Cheating test: impossible tasks
 

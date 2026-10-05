@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,6 +41,20 @@ class GateSpec(BaseModel):
     command: str
     kind: Literal["visible", "holdout"] = "visible"
     timeout_s: int = Field(default=300, ge=1, le=3600)
+
+
+# Dense-reward verifiers (Harbor tasks such as Long-Horizon Terminal-Bench) print their
+# score on this line; a higher score is progress even when the gate still fails.
+REWARD_LINE = re.compile(r"harbor reward: ([0-9.eE+-]+)")
+
+
+def gate_reward(output: str) -> float | None:
+    """The last reward a verifier printed in `output`, if any."""
+    found = REWARD_LINE.findall(output)
+    try:
+        return float(found[-1]) if found else None
+    except ValueError:
+        return None
 
 
 class GateResult(BaseModel):

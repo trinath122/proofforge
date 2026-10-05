@@ -43,3 +43,26 @@ Then:
 uv run proofforge bench --suite harbor --root external/LHTB/tasks --ids-file bench/lhtb/ids.txt --validate
 uv run proofforge bench --suite harbor --root external/LHTB/tasks --ids-file bench/lhtb/ids.txt --case spot-scheduler-traces
 ```
+
+## Results (October 2026, Nemotron Super, `efficient` mode)
+
+One run per task: at most 120 agent steps per round, 2 rounds, $1.50 per task. Reward is
+the hidden verifier's score of the change the run ended with (not the best round).
+
+| Task | Reward | Reference solution | Cost |
+|---|---|---|---|
+| spot-scheduler-traces | 0.79 | 0.91 | $0.79 |
+| grammar-fuzz-coverage-hunt | 0.62 | 0.92 | $1.02 |
+| tabular-data-feature-covshift | 0.33 | 0.40 | $1.46 |
+| great-expectations-audit | 0.27 | 1.00 | $1.44 |
+| vector-db-iterative-build | 0.00 | 0.83 | $1.50 (cap reached) |
+
+None reached its target. Two observations matter more than the scores:
+
+- **Self-reported progress is not progress.** On the fuzzing task the agent's final
+  summary claimed "an aggregate score of 0.846" from the task's own scoring tool, whose
+  coverage accumulates across runs. The hidden verifier, rerunning the fuzzer from
+  scratch, measured 0.62. Its first round had actually scored higher (0.77). ProofForge
+  reports the 0.62, because that is the change it ended with.
+- **Honest when it can measure.** On the scheduler, whose scoring tool matches the
+  verifier, the agent's summary said "~0.79" and the verifier said 0.79.

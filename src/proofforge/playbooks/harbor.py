@@ -20,7 +20,7 @@ import tomllib
 from pathlib import Path
 
 from proofforge.engine.task import FixTask
-from proofforge.gates.base import GateResult, GateSpec
+from proofforge.gates.base import GateResult, GateSpec, gate_reward
 from proofforge.playbooks.pipeline_doctor import CaseValidation, _gate_run
 from proofforge.receipts import Receipt
 from proofforge.sandbox.base import Sandbox
@@ -125,16 +125,9 @@ def _workdir(task_dir: Path, instruction: str) -> str:
     return workdirs[-1].rstrip("/") or "/"
 
 
-REWARD_LINE = re.compile(r"harbor reward: ([0-9.eE+-]+)")
-
-
 def reward(output: str) -> float | None:
     """The verifier's reward (0..1) from a harbor gate's output, if it wrote one."""
-    found = REWARD_LINE.findall(output)
-    try:
-        return float(found[-1]) if found else None
-    except ValueError:
-        return None
+    return gate_reward(output)
 
 
 def _offline(meta: dict[str, object]) -> bool:
@@ -204,11 +197,15 @@ def gates_reward(gates: list[GateResult]) -> float | None:
 
 
 def receipt_reward(receipt: Receipt) -> float | None:
-    """Best verifier reward the run reached (dense-reward suites such as LHTB)."""
-    gates = list(receipt.final_gates)
-    for attempt in receipt.attempts:
-        gates.extend(attempt.gates)
-    return gates_reward(gates)
+    """Verifier reward of the change the run ended with (dense-reward suites such as LHTB).
+
+    Never the best reward seen along the way: picking the best round by its hidden score
+    would be selecting on the test set, and an earlier round's work is not what shipped.
+    """
+    if receipt.final_gates:
+        return gates_reward(receipt.final_gates)
+    graded = [a for a in receipt.attempts if a.gates]
+    return gates_reward(graded[-1].gates) if graded else None
 
 
 def _fmt(value: float | None) -> str:
