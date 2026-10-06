@@ -86,6 +86,7 @@ class Mode(StrEnum):
     DEV = "dev"
     EFFICIENT = "efficient"
     MAX = "max"
+    ULTRA = "ultra"  # Ultra writes every attempt; for comparing models, not for cost
 
 
 # Retries escalate, never downgrade: a fixer round only happens after a stronger proof
@@ -109,6 +110,7 @@ ROUTING: dict[Mode, dict[Role, str]] = {
         Role.BREAKER: "super",
         Role.MONITOR: "super",
     },
+    Mode.ULTRA: {role: "ultra" for role in Role},
 }
 
 

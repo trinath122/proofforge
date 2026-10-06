@@ -40,6 +40,8 @@ def test_every_role_is_routed(mode: Mode) -> None:
 def test_dev_mode_is_lightning_only() -> None:
     assert {model_for(r, Mode.DEV).key for r in Role} == {"lightning"}
     assert model_for(Role.PLANNER, Mode.MAX).key == "ultra"
+    assert model_for(Role.CODER, Mode.MAX).key == "super", "max: Super writes round 1"
+    assert {model_for(r, Mode.ULTRA).key for r in Role} == {"ultra"}
 
 
 @pytest.mark.parametrize("mode", list(Mode))
