@@ -136,7 +136,11 @@ def _offline(meta: dict[str, object]) -> bool:
 
 
 def load_task(
-    task_dir: Path, *, use_solution: bool = False, reward_target: float | None = None
+    task_dir: Path,
+    *,
+    use_solution: bool = False,
+    reward_target: float | None = None,
+    solution_setup: str | None = None,
 ) -> FixTask:
     meta = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
     instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
@@ -150,7 +154,9 @@ def load_task(
         workdir=_workdir(task_dir, instruction),
         repo_in_image=True,
         offline=_offline(meta),
-        setup_command="bash /solution/solve.sh" if solution else "true",
+        # A few reference solutions need a workaround to install in their own image (e.g.
+        # solve.sh calls `patch`, which the image lacks). Only validation uses them.
+        setup_command=(solution_setup or "bash /solution/solve.sh") if solution else "true",
         context=solution,
         holdout=_texts(task_dir / "tests", "/tests"),
         gates=[
@@ -173,12 +179,22 @@ def discover_tasks(root: Path, ids: list[str] | None = None) -> list[Path]:
 
 
 async def validate_task(
-    sandbox: Sandbox, task_dir: Path, *, reward_target: float | None = None
+    sandbox: Sandbox,
+    task_dir: Path,
+    *,
+    reward_target: float | None = None,
+    solution_setup: str | None = None,
 ) -> CaseValidation:
     """Free: the verifier must fail as shipped and pass with the reference solution."""
     broken = await _gate_run(sandbox, load_task(task_dir, reward_target=reward_target))
     solved = await _gate_run(
-        sandbox, load_task(task_dir, use_solution=True, reward_target=reward_target)
+        sandbox,
+        load_task(
+            task_dir,
+            use_solution=True,
+            reward_target=reward_target,
+            solution_setup=solution_setup,
+        ),
     )
     return CaseValidation(
         case=task_dir.name,

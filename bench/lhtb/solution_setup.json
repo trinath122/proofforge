@@ -1,0 +1,3 @@
+{
+  "robotics-slam-benchmark-repair": "cp /solution/files/audit.py /app/src/slam_audit/audit.py && bash /solution/solve.sh"
+}

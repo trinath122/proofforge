@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-from proofforge.bench import SUITES, Case, SuiteName, detect, discover, with_targets
+from proofforge.bench import SUITES, Case, SuiteName, detect, discover, with_task_settings
 from proofforge.budget import BudgetGuard
 from proofforge.config import Settings
 from proofforge.demo import median_task
@@ -239,9 +239,7 @@ def bench(
         ]
         order = {name: i for i, name in enumerate(wanted)}
         selected = sorted((c for c in selected if c.name in order), key=lambda c: order[c.name])
-        targets = ids_file.parent / "targets.json"
-        if targets.is_file():
-            selected = with_targets(selected, targets)
+        selected = with_task_settings(selected, ids_file.parent)
     if limit is not None:
         selected = selected[:limit]
     if not selected:

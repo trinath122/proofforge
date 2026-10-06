@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from proofforge.bench import Case, detect, discover, with_targets
+from proofforge.bench import Case, detect, discover, with_targets, with_task_settings
 from proofforge.budget import BudgetGuard
 from proofforge.engine.loop import Engine
 from proofforge.gates.base import GateResult, GateSpec
@@ -110,6 +110,15 @@ def test_targets_file_sets_the_bar(tmp_path: Path) -> None:
     (case,) = with_targets(discover(("harbor",), roots={"harbor": root}), targets)
     assert case.reward_target == 0.75
     assert ">= 0.75" in case.load().gates[0].command
+
+
+def test_solution_setup_override_is_used_only_for_the_reference(tmp_path: Path) -> None:
+    root = tmp_path / "tasks"
+    shutil.copytree(TASK, root / "mini_add")
+    (tmp_path / "solution_setup.json").write_text('{"mini_add": "cp /solution/x . && true"}')
+    (case,) = with_task_settings(discover(("harbor",), roots={"harbor": root}), tmp_path)
+    assert case.load(use_solution=True).setup_command == "cp /solution/x . && true"
+    assert case.load().setup_command == "true", "the agent never gets the reference"
 
 
 def test_reward_is_read_from_gate_output() -> None:

@@ -34,6 +34,7 @@ class Case:
     suite: SuiteName
     path: Path
     reward_target: float | None = None  # dense-reward Harbor tasks: score that counts as solved
+    solution_setup: str | None = None  # Harbor: workaround to install the reference solution
 
     @property
     def name(self) -> str:
@@ -49,7 +50,10 @@ class Case:
             return pipeline_doctor.load_case(self.path, python=python, use_solution=use_solution)
         if self.suite == "harbor":
             return harbor.load_task(
-                self.path, use_solution=use_solution, reward_target=self.reward_target
+                self.path,
+                use_solution=use_solution,
+                reward_target=self.reward_target,
+                solution_setup=self.solution_setup,
             )
         if self.suite == "impossible":
             return impossible.load_case(self.path, python=python, use_solution=use_solution)
@@ -59,7 +63,12 @@ class Case:
         if self.suite == "pipeline":
             return await pipeline_doctor.validate_case(sandbox, self.path, python=python)
         if self.suite == "harbor":
-            return await harbor.validate_task(sandbox, self.path, reward_target=self.reward_target)
+            return await harbor.validate_task(
+                sandbox,
+                self.path,
+                reward_target=self.reward_target,
+                solution_setup=self.solution_setup,
+            )
         if self.suite == "impossible":
             return await impossible.validate_case(sandbox, self.path, python=python)
         return await realworld.validate_case(sandbox, self.path, python=python)
@@ -71,6 +80,19 @@ def with_targets(cases: list[Case], targets_file: Path) -> list[Case]:
     return [
         replace(c, reward_target=float(targets[c.name])) if c.name in targets else c for c in cases
     ]
+
+
+def with_task_settings(cases: list[Case], folder: Path) -> list[Case]:
+    """Per-task settings kept next to an ids file: targets.json and solution_setup.json."""
+    if (folder / "targets.json").is_file():
+        cases = with_targets(cases, folder / "targets.json")
+    setups_file = folder / "solution_setup.json"
+    if setups_file.is_file():
+        setups = json.loads(setups_file.read_text(encoding="utf-8"))
+        cases = [
+            replace(c, solution_setup=str(setups[c.name])) if c.name in setups else c for c in cases
+        ]
+    return cases
 
 
 def detect(path: Path) -> Case:

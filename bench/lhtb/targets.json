@@ -4,5 +4,9 @@
   "grammar-fuzz-coverage-hunt": 0.88,
   "vector-db-iterative-build": 0.8,
   "tabular-data-feature-covshift": 0.38,
-  "commit0-multilib-tdd": 1.0
+  "commit0-multilib-tdd": 1.0,
+  "robotics-slam-benchmark-repair": 1.0,
+  "materials-phase-diagram-audit": 1.0,
+  "epidemic-inverse-control-audit": 1.0,
+  "matpower-opf-regression": 1.0
 }
