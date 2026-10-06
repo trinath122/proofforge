@@ -10,6 +10,7 @@ same way production code should be: by executable checks the agent cannot see or
 | `cache_stampede_stale_reads` | Pricing cache stampedes the database and serves stale prices | One load per key under 40 concurrent misses, loads for different keys in parallel, no deadlock when a loader reads other keys, errors shared with waiters and never cached, no stale write-back after invalidation |
 | `payments_idempotency_keys` | Payment retries double-charge and leak receipts across accounts | Keys scoped per account, declines replayed without re-charging, transient errors free the key, conflicts caught while the first request is in flight, exact TTL expiry, unrelated keys never serialized |
 | `retry_storm_circuit_breaker` | Retry storm takes down a recovering service | Server `retry_after` honoured, nothing sleeps past the deadline, backoff capped for 1,500 attempts without overflow, a failed half-open trial re-opens with a fresh timeout, exactly one trial call under 12 concurrent callers |
+| `drone_flight_controller` | Inspection drone overshoots, flips under full throttle and skips waypoints | Simulated flights of a planar quadrotor: no derivative kick on target changes, no integrator windup on a 10 m climb, tilt and speed limits held on a 15 m dash, attitude kept when weak motors saturate, wind rejected, waypoints reached only when close and slow, missions abort on timeout |
 
 A textbook solution is not enough. `tests/fixtures/shallow_realworld/` holds a plausible fix
 for each case that passes every visible test; the hidden checks catch all of them (for
