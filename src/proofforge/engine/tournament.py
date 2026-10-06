@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from proofforge.budget import BudgetExceededError
 from proofforge.engine.loop import Engine, Prepared, _State
@@ -27,6 +27,7 @@ from proofforge.engine.tools import Workspace
 from proofforge.gates.base import run_gates, workspace_path
 from proofforge.models.registry import Role
 from proofforge.receipts.schema import Attempt, Receipt
+from proofforge.sandbox.base import NOOP
 from proofforge.sandbox.offline import OfflineSandbox
 
 APPROACHES: dict[str, str] = {
@@ -42,9 +43,18 @@ APPROACHES: dict[str, str] = {
         "cases the task mentions."
     ),
 }
-BREAKER_TEST = "pf_breaker_tests/test_breaker.py"
+BREAKER_DIR = "pf_breaker_tests"
+BREAKER_TEST = f"{BREAKER_DIR}/test_breaker.py"
 BREAKER_TIMEOUT_S = 180
-_RESULT = re.compile(r"^(PASSED|FAILED|ERROR) [^\s:]*::(\S+)", re.MULTILINE)
+
+
+def breaker_command(python: str) -> str:
+    """Standard library only: pytest is not installed in every task image."""
+    return f"{python} -m unittest -v {BREAKER_TEST}"
+
+
+_HEAD = re.compile(r"^(test\w*) \(([\w.]+)\)")
+_OUTCOME = re.compile(r" \.\.\. (ok|FAIL|ERROR|expected failure|unexpected success|skipped.*)$")
 
 
 @dataclass
@@ -67,9 +77,24 @@ class Entrant:
         )
 
 
-def parse_pytest(output: str) -> dict[str, bool]:
-    """Per-test outcome from `pytest -rA` output."""
-    return {name: kind == "PASSED" for kind, name in _RESULT.findall(output)}
+def parse_unittest(output: str) -> dict[str, bool]:
+    """Per-test outcome (`Class.test_name` -> passed) from `python -m unittest -v` output.
+
+    Handles both `test_x (pkg.mod.Class)` and the 3.11+ `test_x (pkg.mod.Class.test_x)`
+    forms, and docstrings printed on the line before the result. Skipped tests are left out.
+    """
+    results: dict[str, bool] = {}
+    pending: str | None = None
+    for line in output.splitlines():
+        head = _HEAD.match(line)
+        if head:
+            name, where = head.group(1), head.group(2).removesuffix("." + head.group(1))
+            pending = f"{where.rsplit('.', 1)[-1]}.{name}"
+        if pending and (outcome := _OUTCOME.search(line)):
+            if not outcome.group(1).startswith("skipped"):
+                results[pending] = outcome.group(1) in {"ok", "expected failure"}
+            pending = None
+    return results
 
 
 def discriminating(entrants: list[Entrant]) -> list[str]:
@@ -151,6 +176,17 @@ async def run_tournament(
                 + reported[0].attempt.impossible_reason,
             )
 
+    # One repair pass: the winner sees which Breaker tests its change fails. Kept only if it
+    # stays eligible and passes more Breaker tests; hidden checks still play no part.
+    repair_attempt, repaired = (
+        await _repair(engine, prep, winner, test_code) if test_code else (None, None)
+    )
+    if repair_attempt is not None:
+        attempts.append(repair_attempt)
+    if repaired is not None:
+        ordered = [repaired, *ordered]
+        winner = repaired
+
     # The verdict: hidden checks on the winner only.
     graded = await _grade(engine, prep, winner)
     verified = graded and winner.attempt.all_passed
@@ -167,6 +203,67 @@ async def run_tournament(
         diff=await engine._diff(task, final) if final else "",
         note=note,
     )
+
+
+def _passed(entrant: Entrant) -> int:
+    return sum(entrant.breaker.values())
+
+
+async def _repair(
+    engine: Engine, prep: Prepared, winner: Entrant, test_code: str
+) -> tuple[Attempt | None, Entrant | None]:
+    """Returns the repair attempt (for the receipt) and the repaired entrant if kept."""
+    failing = sorted(n for n, ok in winner.breaker.items() if not ok)
+    if not winner.eligible or winner.state is None or not failing:
+        return None, None
+    task = prep.task
+    seeded = await engine.sandbox.run(
+        winner.state.checkpoint,
+        NOOP,
+        files={workspace_path(BREAKER_TEST, task.workdir): test_code.encode()},
+        keep=True,
+        cwd=task.workdir,
+    )
+    note = (
+        f"An independent reviewer wrote extra tests from the task specification in "
+        f"`{BREAKER_TEST}`. {len(failing)} of them fail on your change: "
+        + ", ".join(failing[:20])
+        + f". Run `{breaker_command(engine.python)}` to see why. The reviewer can be wrong: "
+        "fix the code only where a test matches the specification, never change the test "
+        "file, and say in your summary which tests you believe are wrong."
+    )
+    state = replace(winner.state, checkpoint=seeded.checkpoint, notes=[note])
+    try:
+        attempt, new_state = await engine._agent_attempt(
+            task,
+            prep.oracle,
+            state,
+            rnd=2,
+            branch=0,
+            role=Role.FIXER,
+            include_holdout=False,
+        )
+    except BudgetExceededError:
+        return None, None
+    attempt.label = f"{winner.label}+repair"
+    if new_state is None:
+        attempt.error = attempt.error or "repair made no change"
+        return attempt, None
+    # The reviewer's file is not part of the change.
+    cleaned = await engine.sandbox.run(
+        new_state.checkpoint, f"rm -rf {BREAKER_DIR}", keep=True, cwd=task.workdir
+    )
+    new_state.checkpoint = cleaned.checkpoint
+    attempt.checkpoint = cleaned.checkpoint.id
+    attempt.edited_files = [f for f in attempt.edited_files if not f.startswith(BREAKER_DIR)]
+    candidate = Entrant(attempt.label, attempt, new_state)
+    await _score(engine, task, candidate, test_code)
+    total = len(winner.breaker)
+    attempt.breaker_score = f"{_passed(candidate)}/{total} (was {_passed(winner)}/{total})"
+    if candidate.eligible and _passed(candidate) > _passed(winner):
+        return attempt, candidate
+    attempt.error = "repair not kept: it did not pass more reviewer tests while staying eligible"
+    return attempt, None
 
 
 def _sealed(engine: Engine) -> Engine:
@@ -189,6 +286,7 @@ async def _breaker(engine: Engine, prep: Prepared) -> tuple[Attempt, str]:
     messages = build_breaker_messages(
         task.description,
         test_path=BREAKER_TEST,
+        run_command=breaker_command(engine.python),
         files=sorted(set(task.editable) | set(task.context) | set(task.protected)),
         workdir=task.workdir if task.repo_in_image else None,
     )
@@ -231,13 +329,13 @@ async def _score(engine: Engine, task: FixTask, entrant: Entrant, test_code: str
         return
     res = await engine.sandbox.run(
         entrant.state.checkpoint,
-        f"{engine.python} -m pytest -q -rA -p no:cacheprovider {BREAKER_TEST}",
+        breaker_command(engine.python),
         files={workspace_path(BREAKER_TEST, task.workdir): test_code.encode()},
         keep=False,
         timeout_s=BREAKER_TIMEOUT_S,
         cwd=task.workdir,
     )
-    entrant.breaker = parse_pytest(res.stdout + "\n" + res.stderr)
+    entrant.breaker = parse_unittest(res.stderr + "\n" + res.stdout)
 
 
 async def _grade(engine: Engine, prep: Prepared, entrant: Entrant) -> bool:

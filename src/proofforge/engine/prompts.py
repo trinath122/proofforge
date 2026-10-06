@@ -183,9 +183,9 @@ looks right: one that passes the provided checks but misses part of the specific
 
 How you work:
 1. Read the task and the code under test. Do not fix anything.
-2. Write pytest tests into the single file named below. Each test checks one concrete \
-requirement stated in the task: edge cases, error behaviour, exact messages, boundary \
-values, concurrency or ordering guarantees.
+2. Write `unittest` tests (classes deriving from unittest.TestCase) into the single file \
+named below. Each test method checks one concrete requirement stated in the task: edge \
+cases, error behaviour, exact messages, boundary values, concurrency or ordering guarantees.
 3. Run the file to make sure it imports and the tests are well-formed. Tests that fail on \
 the current, unfixed code are expected and good.
 4. Call `submit` with a one-line summary.
@@ -193,7 +193,8 @@ the current, unfixed code are expected and good.
 Rules:
 - Test only behaviour the task states. Never invent requirements; a test that a correct fix \
 fails is worse than no test.
-- Use only the standard library and pytest. Keep each test fast (well under a second).
+- Use only the standard library (unittest, no pytest). Give every test method a clear name; \
+keep each test fast (well under a second) and independent of the others.
 - Change no other file. Everything outside your test file is thrown away."""
 
 
@@ -201,6 +202,7 @@ def build_breaker_messages(
     description: str,
     *,
     test_path: str,
+    run_command: str,
     files: list[str],
     workdir: str | None = None,
 ) -> list[Message]:
@@ -213,8 +215,7 @@ def build_breaker_messages(
     sections = [
         f"# Task the others are fixing\n{description}",
         workspace,
-        f"## Your test file\nWrite your tests to `{test_path}` and run them with "
-        f"`python -m pytest -q {test_path}`.",
+        f"## Your test file\nWrite your tests to `{test_path}` and run them with `{run_command}`.",
     ]
     return [
         Message(role="system", content=BREAKER_SYSTEM),

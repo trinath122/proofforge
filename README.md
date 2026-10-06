@@ -114,7 +114,11 @@ On the fuzzing task it claimed 0.846; the hidden verifier measured 0.62.
 sandbox checkpoint. In parallel a Breaker agent reads only the specification and writes
 extra tests aimed at fixes that merely look right. Entrants that pass the visible checks
 without tampering are ranked by how many Breaker tests they pass (a test every entrant fails
-does not count), and only the winner faces the hidden checks.
+does not count). The winner then gets one repair pass: it is shown which Breaker tests
+its change fails, told the reviewer can be wrong, and the repair is kept only if it passes
+more Breaker tests while still passing the visible checks. Only then does the winner face
+the hidden checks. Breaker tests use the standard library's `unittest`, so they run in any
+image with Python.
 
 The winner is chosen before any hidden check runs. Choosing whichever entrant happens to
 pass the hidden checks would be selecting on the test set. The losers are graded afterwards
