@@ -29,13 +29,15 @@ def render_markdown(r: Receipt) -> str:
         "",
         "## Attempts",
         "",
-        "| Round | Branch | Model | Steps | Visible | Hidden holdout | Flags | Cost |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Round | Branch | Entrant | Model | Steps | Visible | Breaker | Hidden holdout | Flags "
+        "| Cost |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for a in r.attempts:
         lines.append(
-            f"| {a.round} | {a.branch} | {a.model_key} | {a.steps or '-'} | {a.score('visible')} "
-            f"| {a.score('holdout')} | {a.flags} | ${a.cost_usd:.4f} |"
+            f"| {a.round} | {a.branch} | {a.label or '-'} | {a.model_key} | {a.steps or '-'} "
+            f"| {a.score('visible')} | {a.breaker_score or '-'} | {a.score('holdout')} "
+            f"| {a.flags} | ${a.cost_usd:.4f} |"
         )
     failed_replies = [a for a in r.attempts if a.error and a.response_excerpt]
     if failed_replies:

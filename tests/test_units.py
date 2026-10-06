@@ -171,7 +171,7 @@ def test_receipt_roundtrip(tmp_path: Path) -> None:
     md = render_markdown(receipt)
     assert "PASS `v` [visible]" in md
     assert "```diff" in md
-    assert "| 1 | 0 | lightning | - | 1/1 | - | - |" in md
+    assert "| 1 | 0 | - | lightning | - | 1/1 | - | - | - |" in md
     assert (tmp_path / "r1.md").exists()
 
     caught = receipt.attempts[0].model_copy(
@@ -183,7 +183,7 @@ def test_receipt_roundtrip(tmp_path: Path) -> None:
         }
     )
     row = render_markdown(receipt.model_copy(update={"attempts": [caught]}))
-    assert "| 30 | 1/1 | 0/1 | tampered: t.py; step limit 30 reached |" in row
+    assert "| 30 | 1/1 | - | 0/1 | tampered: t.py; step limit 30 reached |" in row
 
 
 def test_key_fallback_from_contree_profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

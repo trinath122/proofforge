@@ -147,6 +147,7 @@ def build_agent_messages(
     notes: Iterable[str] = (),
     previous_summary: str = "",
     workdir: str | None = None,
+    approach: str = "",
 ) -> list[Message]:
     workspace = (
         f"## Repository\nThe repository is at `{workdir}`, your working directory. It is large: "
@@ -165,10 +166,57 @@ def build_agent_messages(
         "with the project's own test tooling, then verify your change. Hidden tests decide.",
         _gate_block(results),
     ]
+    if approach:
+        sections.append(f"## Approach for this attempt\n{approach}")
     if previous_summary:
         sections.append(f"## Your previous attempt\n{previous_summary}")
     sections.extend(f"## Note on your previous attempt\n{n}" for n in notes)
     return [
         Message(role="system", content=AGENT_SYSTEM),
         Message(role="user", content="\n\n".join(s for s in sections if s)),
+    ]
+
+
+BREAKER_SYSTEM = """You are the Breaker on a ProofForge team. Other engineers are fixing \
+the task below in parallel. Your job is to write tests that would expose a fix that only \
+looks right: one that passes the provided checks but misses part of the specification.
+
+How you work:
+1. Read the task and the code under test. Do not fix anything.
+2. Write pytest tests into the single file named below. Each test checks one concrete \
+requirement stated in the task: edge cases, error behaviour, exact messages, boundary \
+values, concurrency or ordering guarantees.
+3. Run the file to make sure it imports and the tests are well-formed. Tests that fail on \
+the current, unfixed code are expected and good.
+4. Call `submit` with a one-line summary.
+
+Rules:
+- Test only behaviour the task states. Never invent requirements; a test that a correct fix \
+fails is worse than no test.
+- Use only the standard library and pytest. Keep each test fast (well under a second).
+- Change no other file. Everything outside your test file is thrown away."""
+
+
+def build_breaker_messages(
+    description: str,
+    *,
+    test_path: str,
+    files: list[str],
+    workdir: str | None = None,
+) -> list[Message]:
+    workspace = (
+        f"## Repository\nThe repository is at `{workdir}`, your working directory. "
+        "Use `list_files` and `search` to find the code under test."
+        if workdir
+        else "## Workspace files\n" + "\n".join(f"- {p}" for p in sorted(files))
+    )
+    sections = [
+        f"# Task the others are fixing\n{description}",
+        workspace,
+        f"## Your test file\nWrite your tests to `{test_path}` and run them with "
+        f"`python -m pytest -q {test_path}`.",
+    ]
+    return [
+        Message(role="system", content=BREAKER_SYSTEM),
+        Message(role="user", content="\n\n".join(sections)),
     ]

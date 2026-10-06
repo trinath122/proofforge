@@ -19,6 +19,7 @@ from proofforge.config import Settings
 from proofforge.demo import median_task
 from proofforge.engine import Engine, FixTask
 from proofforge.engine.loop import Strategy
+from proofforge.engine.tournament import run_tournament
 from proofforge.llm.client import TokenFactoryLLM
 from proofforge.models.registry import MODELS, Mode
 from proofforge.playbooks import CaseValidation, harbor, impossible
@@ -205,6 +206,10 @@ def bench(
     ] = False,
     mode: Annotated[Mode | None, typer.Option()] = None,
     strategy: StrategyOption = None,
+    tournament: Annotated[
+        bool,
+        typer.Option(help="race three approaches plus a Breaker per task; hidden checks judge"),
+    ] = False,
 ) -> None:
     """Run the benchmark suites and report solve rate, cost and time."""
     load_dotenv()
@@ -261,7 +266,7 @@ def bench(
     settings = _settings(mode)
     _apply_strategy(settings, strategy)
     engine, budget = _engine(settings)
-    receipts = asyncio.run(_run_all(engine, selected, settings))
+    receipts = asyncio.run(_run_all(engine, selected, settings, tournament=tournament))
     selected = selected[: len(receipts)]  # a provider outage can stop the run early
     solved = _report_bench(selected, receipts, settings, suites, budget)
     raise typer.Exit(0 if solved == len(receipts) else 1)
@@ -355,13 +360,17 @@ async def _validate_all(selected: list[Case]) -> list[CaseValidation]:
     return list(await asyncio.gather(*(c.validate(sandbox) for c in selected)))
 
 
-async def _run_all(engine: Engine, selected: list[Case], settings: Settings) -> list[Receipt]:
+async def _run_all(
+    engine: Engine, selected: list[Case], settings: Settings, *, tournament: bool = False
+) -> list[Receipt]:
     receipts: list[Receipt] = []
     for case in selected:
-        engine.strategy = _strategy_for(case, settings)
-        console.print(f"[dim]running {case.suite}/{case.name} ({engine.strategy})...[/dim]")
+        engine.strategy = "agent" if tournament else _strategy_for(case, settings)
+        how = "tournament" if tournament else engine.strategy
+        console.print(f"[dim]running {case.suite}/{case.name} ({how})...[/dim]")
         try:
-            receipt = await engine.fix(case.load())
+            task = case.load()
+            receipt = await (run_tournament(engine, task) if tournament else engine.fix(task))
         except Exception as exc:  # one broken task must never sink a whole run
             receipt = Receipt(
                 run_id=f"{time.strftime('%Y%m%d-%H%M%S')}-error",

@@ -34,8 +34,18 @@ from proofforge.gates.base import (
 from proofforge.llm.base import LLM, Message
 from proofforge.models.registry import Mode, Role
 from proofforge.receipts.schema import Attempt, ModelUsage, Receipt, Status
-from proofforge.sandbox.base import NOOP, Checkpoint, Sandbox
+from proofforge.sandbox.base import NOOP, Checkpoint, ExecResult, Sandbox
 from proofforge.sandbox.offline import OfflineSandbox
+
+
+@dataclass
+class Prepared:
+    task: FixTask
+    oracle: Oracle
+    setup: ExecResult
+    repro: list[GateResult]
+    run_id: str
+    started: float
 
 
 @dataclass
@@ -121,12 +131,12 @@ class Engine:
             return await sealed._fix(task)
         return await self._fix(task)
 
-    async def _fix(self, task: FixTask) -> Receipt:
+    async def prepare(self, task: FixTask) -> Prepared:
+        """Seed and set up the task, then run the gates once to prove the problem exists."""
         started = time.monotonic()
         self.budget.start_task()
         oracle = task.oracle()
         run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
-
         base = await self.sandbox.base(task.image)
         seed = {
             workspace_path(p, task.workdir): c.encode() for p, c in task.workspace_seed().items()
@@ -134,43 +144,51 @@ class Engine:
         setup = await self.sandbox.run(
             base, task.setup_command, files=seed, keep=True, cwd=task.workdir
         )
+        repro: list[GateResult] = []
+        if setup.ok:
+            # With no visible checks (SWE-bench style) the hidden ones prove the bug exists.
+            # Their output is never shown to the agent, only how many failed.
+            repro = await run_gates(
+                self.sandbox, setup.checkpoint, oracle, include_holdout=task.hidden_only
+            )
+        return Prepared(task, oracle, setup, repro, run_id, started)
+
+    def receipt(self, prep: Prepared, status: Status, **kw: object) -> Receipt:
+        return Receipt(
+            run_id=prep.run_id,
+            task_title=prep.task.title,
+            mode=self.mode.value,
+            status=status,
+            image=prep.task.image,
+            base_checkpoint=prep.setup.checkpoint.id,
+            oracle_digest=prep.oracle.digest,
+            protected_hashes=prep.oracle.protected_hashes,
+            reproduction=prep.repro,
+            usage={k: ModelUsage(**vars(u)) for k, u in self.budget.task_by_model.items()},
+            total_cost_usd=self.budget.task.cost_usd,
+            wall_time_s=time.monotonic() - prep.started,
+            **kw,  # type: ignore[arg-type]
+        )
+
+    @staticmethod
+    def precheck(prep: Prepared) -> tuple[Status, str] | None:
+        """Why the task cannot be attempted at all, if it cannot."""
+        if not prep.setup.ok:
+            return "reproduction_failed", f"setup failed: {prep.setup.stderr[-500:]}"
+        if all(g.passed for g in prep.repro):
+            return "already_passing", "Gates already pass before any change; nothing to prove."
+        return None
+
+    async def _fix(self, task: FixTask) -> Receipt:
+        prep = await self.prepare(task)
+        oracle, setup, repro = prep.oracle, prep.setup, prep.repro
 
         def receipt(status: Status, **kw: object) -> Receipt:
-            return Receipt(
-                run_id=run_id,
-                task_title=task.title,
-                mode=self.mode.value,
-                status=status,
-                image=task.image,
-                base_checkpoint=setup.checkpoint.id,
-                oracle_digest=oracle.digest,
-                protected_hashes=oracle.protected_hashes,
-                usage={k: ModelUsage(**vars(u)) for k, u in self.budget.task_by_model.items()},
-                total_cost_usd=self.budget.task.cost_usd,
-                wall_time_s=time.monotonic() - started,
-                **kw,  # type: ignore[arg-type]
-            )
+            kw.pop("reproduction", None)
+            return self.receipt(prep, status, **kw)
 
-        if not setup.ok:
-            return receipt(
-                "reproduction_failed",
-                reproduction=[],
-                attempts=[],
-                note=f"setup failed: {setup.stderr[-500:]}",
-            )
-
-        # With no visible checks (SWE-bench style) the hidden ones prove the bug exists.
-        # Their output is never shown to the agent, only how many failed.
-        repro = await run_gates(
-            self.sandbox, setup.checkpoint, oracle, include_holdout=task.hidden_only
-        )
-        if all(g.passed for g in repro):
-            return receipt(
-                "already_passing",
-                reproduction=repro,
-                attempts=[],
-                note="Gates already pass before any change; nothing to prove.",
-            )
+        if stop := self.precheck(prep):
+            return receipt(stop[0], attempts=[], note=stop[1])
 
         state = _State(setup.checkpoint, dict(task.editable), repro, [])
         attempts: list[Attempt] = []
@@ -372,6 +390,8 @@ class Engine:
         rnd: int,
         branch: int,
         role: Role,
+        approach: str = "",
+        include_holdout: bool = True,
     ) -> tuple[Attempt, _State | None]:
         """One agent episode: explore, run, edit and submit, all inside the sandbox."""
         ws = Workspace(
@@ -393,6 +413,7 @@ class Engine:
             results=state.results,
             notes=state.notes,
             previous_summary=state.summary,
+            approach=approach,
         )
         temperature = 0.2 if branch == 0 else min(0.2 + 0.25 * branch, 1.0)
         attempt = Attempt(round=rnd, branch=branch, model_key="", checkpoint=None, edited_files=[])
@@ -417,7 +438,9 @@ class Engine:
 
         attempt.checkpoint = ws.checkpoint.id
         attempt.tampered_files = await detect_tampering(self.sandbox, ws.checkpoint, oracle)
-        attempt.gates = await run_gates(self.sandbox, ws.checkpoint, oracle, include_holdout=True)
+        attempt.gates = await run_gates(
+            self.sandbox, ws.checkpoint, oracle, include_holdout=include_holdout
+        )
         files = dict(state.files)
         for path in ws.touched:
             try:

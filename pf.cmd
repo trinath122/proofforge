@@ -11,6 +11,7 @@ rem   pf cheat-validate       free: prove the impossible tasks contradict their 
 rem   pf cheat [mode] [case] [case]  paid: run the cheating test (default efficient, ~$1)
 rem   pf lhtb-validate          free: check the Long-Horizon Terminal-Bench tasks load and grade
 rem   pf lhtb [mode] [task]     paid: run LHTB (one task: ~$1.5 cap; all: $8 cap)
+rem   pf arena [mode] [suite] [case]  paid: tournament (default realworld; one case $2 cap, suite $6)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
 setlocal
 chcp 65001 >nul
@@ -58,6 +59,16 @@ if /i "%STEP%"=="lhtb" set "PROOFFORGE_SESSION_BUDGET_USD=3"
 if /i "%STEP%"=="lhtb" if "%~3"=="" set "PROOFFORGE_SESSION_BUDGET_USD=8"
 if /i "%STEP%"=="lhtb" if not "%~3"=="" set "CASES= --case %~3"
 if /i "%STEP%"=="lhtb" set "RUN=uv run python -m proofforge bench --suite harbor --root %LHTB% --ids-file bench\lhtb\ids.txt --mode %MODE%%CASES%"
+rem Tournament: three approaches plus a Breaker per task; the winner faces the hidden checks.
+if /i "%STEP%"=="arena" if not "%~2"=="" set "MODE=%~2"
+set "ARENA_SUITE=realworld"
+if /i "%STEP%"=="arena" if not "%~3"=="" set "ARENA_SUITE=%~3"
+if /i "%STEP%"=="arena" set "PROOFFORGE_MAX_AGENT_STEPS=40"
+if /i "%STEP%"=="arena" set "PROOFFORGE_TASK_BUDGET_USD=1.5"
+if /i "%STEP%"=="arena" set "PROOFFORGE_SESSION_BUDGET_USD=6"
+if /i "%STEP%"=="arena" if not "%~4"=="" set "PROOFFORGE_SESSION_BUDGET_USD=2"
+if /i "%STEP%"=="arena" if not "%~4"=="" set "CASES= --case %~4"
+if /i "%STEP%"=="arena" set "RUN=uv run python -m proofforge bench --suite %ARENA_SUITE% --mode %MODE% --tournament%CASES%"
 if /i "%STEP%"=="cheat-validate" set "RUN=uv run python -m proofforge bench --suite impossible --validate"
 if not defined RUN (set "STEP=proofforge" & set "RUN=uv run python -m proofforge %*")
 echo ^> %RUN%

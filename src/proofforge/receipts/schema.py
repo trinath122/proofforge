@@ -45,6 +45,10 @@ class Attempt(BaseModel):
     spec_misses: list[str] = Field(
         default_factory=list, description="listed interfaces missing at first submit"
     )
+    label: str = Field(default="", description="tournament entrant: approach, or 'breaker'")
+    breaker_score: str = Field(
+        default="", description="tournament: breaker tests passed / discriminating tests"
+    )
     transcript: list[dict[str, Any]] = Field(
         default_factory=list, description="full agent conversation; training data"
     )

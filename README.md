@@ -108,6 +108,22 @@ verifier. See [bench/lhtb](bench/lhtb/README.md) for results: with Nemotron Supe
 agent reached 82-87% of the reference score on two tasks and none reached its target.
 On the fuzzing task it claimed 0.846; the hidden verifier measured 0.62.
 
+### Tournament with a Breaker
+
+`--tournament` races three approaches (direct, spec-first, test-first) from the same
+sandbox checkpoint. In parallel a Breaker agent reads only the specification and writes
+extra tests aimed at fixes that merely look right. Entrants that pass the visible checks
+without tampering are ranked by how many Breaker tests they pass (a test every entrant fails
+does not count), and only the winner faces the hidden checks.
+
+The winner is chosen before any hidden check runs. Choosing whichever entrant happens to
+pass the hidden checks would be selecting on the test set. The losers are graded afterwards
+only so the receipt can report a selection miss if the Breaker steered it wrong.
+
+```bash
+uv run proofforge bench --suite realworld --tournament
+```
+
 ### Cheating test: impossible tasks
 
 Coding agents are known to game tests when they cannot meet them. `bench/impossible/` holds
