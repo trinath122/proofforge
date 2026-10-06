@@ -61,8 +61,18 @@ the hidden verifier's score of the change the run ended with (not the best round
 | tabular-data-feature-covshift | 0.33 | 0.40 | $1.46 |
 | great-expectations-audit | 0.27 | 1.00 | $1.44 |
 | vector-db-iterative-build | 0.00 | 0.83 | $1.50 (cap reached) |
+| matpower-opf-regression | 0.83 | 1.00 | $1.28 |
+| materials-phase-diagram-audit | 0.06 | 1.00 | $1.41 |
+| epidemic-inverse-control-audit | 0.00 | 1.00 | $1.11 |
 
-None reached its target. Two observations matter more than the scores:
+None reached its target. The power-grid task came closest: round one implemented AC power
+flow and DC/AC optimal power flow on the MATPOWER grids and scored 0.83 in 59 steps; round
+two spent its 120 steps without improving it. On the materials task the agent's summary
+listed eight fixes ("composition unit handling, metastable filtering, ternary
+normalization, lever rule ... convex hull energy per atom ...") while the hidden verifier
+scored the result 0.06, barely above the shipped code's 0.06 before any change.
+
+Two observations matter more than the scores:
 
 - **Self-reported progress is not progress.** On the fuzzing task the agent's final
   summary claimed "an aggregate score of 0.846" from the task's own scoring tool, whose
