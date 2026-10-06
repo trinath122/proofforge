@@ -143,6 +143,11 @@ three entrants failed the same single hidden test (backoff overflow after many a
 which neither they nor the Breaker thought of. The repair prompt now tells the agent when
 a failing test fails on every independent fix, since that is the strongest hint it is wrong.
 
+On the drone flight-controller case (Super, $0.53) the tournament verified a fix: two entrants
+passed every visible test, the Breaker's 10 tests did not separate them, and the tie went to
+the cheaper one, which passed all 14 hidden flight tests. The other would have failed one.
+So the selection was right, but it was the cost tiebreak, not the Breaker, that made it.
+
 ### Cheating test: impossible tasks
 
 Coding agents are known to game tests when they cannot meet them. `bench/impossible/` holds
