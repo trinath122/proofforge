@@ -4,3 +4,7 @@ grammar-fuzz-coverage-hunt
 vector-db-iterative-build
 tabular-data-feature-covshift
 commit0-multilib-tdd
+robotics-slam-benchmark-repair
+materials-phase-diagram-audit
+epidemic-inverse-control-audit
+matpower-opf-regression

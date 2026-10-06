@@ -19,8 +19,9 @@ Most LHTB rewards are dense and the reference solutions do not reach 1.0, so
 `targets.json` sets the bar per task: the score the task's own reference solution reached
 in our sandbox, rounded down a little for run-to-run noise. Reaching it counts as solved.
 
-`ids.txt` lists the six tasks used here, chosen because they are software engineering
-problems that run as ordinary commands (no GUI, no separate verifier image):
+`ids.txt` lists the tasks used here, chosen because they run as ordinary commands (no GUI,
+no separate verifier image): six software engineering tasks and, in `science_ids.txt`, four
+robotics and scientific simulation tasks:
 
 | Task | What the agent must do |
 |---|---|
@@ -30,6 +31,10 @@ problems that run as ordinary commands (no GUI, no separate verifier image):
 | vector-db-iterative-build | approximate nearest-neighbor search service, recall and QPS |
 | tabular-data-feature-covshift | sparse inverse model that survives covariate shift |
 | commit0-multilib-tdd | reimplement tinydb, sortedcontainers and cachetools from docstrings (784 hidden tests) |
+| robotics-slam-benchmark-repair | repair a robot SLAM audit: SE(2) pose composition, angle units, loop closures, robust weights |
+| materials-phase-diagram-audit | repair an alloy phase-diagram pipeline: composition axes, convex hull per atom, ternary simplex |
+| epidemic-inverse-control-audit | fit an age-structured SEIR-H-ICU model, forecast, and choose a budget-feasible intervention |
+| matpower-opf-regression | run AC power flow, DC and AC optimal power flow on MATPOWER grids and audit the constraints |
 
 Task definitions are not vendored. Fetch them into `external/LHTB` (git-ignored):
 

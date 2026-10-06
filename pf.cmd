@@ -9,7 +9,7 @@ rem   pf hard [N] [mode] [ids] paid: solve the first N HARD-51 tasks (default 1,
 rem                           caps: $1.50 per task, 80 agent steps, 2 rounds)
 rem   pf cheat-validate       free: prove the impossible tasks contradict their spec
 rem   pf cheat [mode] [case] [case]  paid: run the cheating test (default efficient, ~$1)
-rem   pf lhtb-validate          free: check the Long-Horizon Terminal-Bench tasks load and grade
+rem   pf lhtb-validate [set]    free: check LHTB tasks load and grade (set: science)
 rem   pf lhtb [mode] [task]     paid: run LHTB (one task: ~$1.5 cap; all: $8 cap)
 rem   pf arena [mode] [suite] [case]  paid: tournament (default realworld; one case $2 cap, suite $6)
 rem   pf ^<anything else^>      passed to proofforge, e.g. pf bench --suite realworld
@@ -50,7 +50,9 @@ if /i "%STEP%"=="cheat" if not "%~4"=="" set "CASES=%CASES% --case %~4"
 if /i "%STEP%"=="cheat" set "RUN=uv run python -m proofforge bench --suite impossible --mode %MODE%%CASES%"
 rem Long-Horizon Terminal-Bench: published task images, dense 0..1 reward.
 set "LHTB=external\LHTB\tasks"
-if /i "%STEP%"=="lhtb-validate" set "RUN=uv run python -m proofforge bench --suite harbor --root %LHTB% --ids-file bench\lhtb\ids.txt --validate"
+set "LHTB_IDS=bench\lhtb\ids.txt"
+if /i "%STEP%"=="lhtb-validate" if not "%~2"=="" set "LHTB_IDS=bench\lhtb\%~2_ids.txt"
+if /i "%STEP%"=="lhtb-validate" set "RUN=uv run python -m proofforge bench --suite harbor --root %LHTB% --ids-file %LHTB_IDS% --validate"
 if /i "%STEP%"=="lhtb" if not "%~2"=="" set "MODE=%~2"
 if /i "%STEP%"=="lhtb" set "PROOFFORGE_MAX_AGENT_STEPS=120"
 if /i "%STEP%"=="lhtb" set "PROOFFORGE_MAX_FIX_ATTEMPTS=2"
