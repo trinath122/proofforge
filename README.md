@@ -128,6 +128,14 @@ only so the receipt can report a selection miss if the Breaker steered it wrong.
 uv run proofforge bench --suite realworld --tournament
 ```
 
+First result (retry storm + circuit breaker, Nemotron Super, $0.42): the Breaker wrote 15
+tests. Run against the case's reference solution afterwards, 6 of them turned out to be
+wrong, and those were exactly the 6 that every entrant failed. The discriminating-test rule
+had already set them aside, and the repair pass, which they triggered, was not kept. All
+three entrants failed the same single hidden test (backoff overflow after many attempts),
+which neither they nor the Breaker thought of. The repair prompt now tells the agent when
+a failing test fails on every independent fix, since that is the strongest hint it is wrong.
+
 ### Cheating test: impossible tasks
 
 Coding agents are known to game tests when they cannot meet them. `bench/impossible/` holds

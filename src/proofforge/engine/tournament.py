@@ -179,7 +179,7 @@ async def run_tournament(
     # One repair pass: the winner sees which Breaker tests its change fails. Kept only if it
     # stays eligible and passes more Breaker tests; hidden checks still play no part.
     repair_attempt, repaired = (
-        await _repair(engine, prep, winner, test_code) if test_code else (None, None)
+        await _repair(engine, prep, winner, entrants, test_code) if test_code else (None, None)
     )
     if repair_attempt is not None:
         attempts.append(repair_attempt)
@@ -209,8 +209,21 @@ def _passed(entrant: Entrant) -> int:
     return sum(entrant.breaker.values())
 
 
+def _evidence(test: str, entrants: list[Entrant]) -> str:
+    """How the other independent fixes fared on a test: the agent's only hint that it is wrong."""
+    others = [e for e in entrants if e.breaker and e.state is not None]
+    failed = sum(not e.breaker.get(test, False) for e in others)
+    if failed == len(others) and len(others) > 1:
+        return f"{test} (fails on all {failed} independent fixes; possibly a wrong test)"
+    return f"{test} (fails on {failed} of {len(others)} fixes)"
+
+
 async def _repair(
-    engine: Engine, prep: Prepared, winner: Entrant, test_code: str
+    engine: Engine,
+    prep: Prepared,
+    winner: Entrant,
+    entrants: list[Entrant],
+    test_code: str,
 ) -> tuple[Attempt | None, Entrant | None]:
     """Returns the repair attempt (for the receipt) and the repaired entrant if kept."""
     failing = sorted(n for n, ok in winner.breaker.items() if not ok)
@@ -226,11 +239,13 @@ async def _repair(
     )
     note = (
         f"An independent reviewer wrote extra tests from the task specification in "
-        f"`{BREAKER_TEST}`. {len(failing)} of them fail on your change: "
-        + ", ".join(failing[:20])
-        + f". Run `{breaker_command(engine.python)}` to see why. The reviewer can be wrong: "
-        "fix the code only where a test matches the specification, never change the test "
-        "file, and say in your summary which tests you believe are wrong."
+        f"`{BREAKER_TEST}`. {len(failing)} of them fail on your change:\n"
+        + "\n".join(f"- {_evidence(n, entrants)}" for n in failing[:20])
+        + f"\nRun `{breaker_command(engine.python)}` to see why. The reviewer is often wrong: "
+        "for each failure, compare the test with the exact wording of the specification "
+        "first. Change the code only where the test matches the specification, never change "
+        "the test file, and if every failing test is wrong, submit without changes and say "
+        "which tests are wrong and why."
     )
     state = replace(winner.state, checkpoint=seeded.checkpoint, notes=[note])
     try:

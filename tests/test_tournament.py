@@ -9,6 +9,7 @@ from proofforge.engine.tournament import (
     APPROACHES,
     BREAKER_TEST,
     Entrant,
+    _evidence,
     discriminating,
     parse_unittest,
     rank,
@@ -155,6 +156,8 @@ def test_parse_and_rank() -> None:
     c = entrant("c", {"t1": True, "t2": True, "t3": False}, cost=0.5)
     assert discriminating([a, b, c]) == ["t1", "t2"], "t3 fails everywhere, so it cannot count"
     assert [e.label for e in rank([a, b, c])] == ["c", "b", "a"], "ties go to the cheaper one"
+    assert "possibly a wrong test" in _evidence("t3", [a, b, c])
+    assert _evidence("t2", [a, b, c]) == "t2 (fails on 1 of 3 fixes)"
 
 
 async def test_repair_from_breaker_feedback_is_kept_when_it_helps(
