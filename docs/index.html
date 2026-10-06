@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProofForge receipts</title>
+<meta name="description" content="Real runs of ProofForge, a coding agent that never says done without proof: every step, every check, and the verdict of hidden checks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Schibsted+Grotesk:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --desk: #d9dfe4;
+  --desk-2: #cdd4da;
+  --paper: #fdfdfb;
+  --ink: #1a2130;
+  --ink-2: #5a6475;
+  --rule: #c9cfd6;
+  --pass: #1e7a4c;
+  --fail: #b42318;
+  --honest: #2456a6;
+  --amber: #9a5b00;
+  --add: #e3f2e8;
+  --del: #fbe7e5;
+  --focus: #2456a6;
+  --sans: "Schibsted Grotesk", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --stamp-blend: multiply;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --desk: #1b2029; --desk-2: #232a35; --paper: #2a313d; --ink: #e8ebef; --ink-2: #a3acba;
+    --rule: #3c4553; --pass: #5cc48d; --fail: #f2776b; --honest: #7fa8ec; --amber: #e0a446;
+    --add: #1f3b2c; --del: #43262a; --focus: #7fa8ec; --stamp-blend: screen; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --desk: #1b2029; --desk-2: #232a35; --paper: #2a313d; --ink: #e8ebef; --ink-2: #a3acba;
+  --rule: #3c4553; --pass: #5cc48d; --fail: #f2776b; --honest: #7fa8ec; --amber: #e0a446;
+  --add: #1f3b2c; --del: #43262a; --focus: #7fa8ec; --stamp-blend: screen; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--desk); color: var(--ink);
+  font: 16px/1.55 var(--sans);
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+
+/* Masthead */
+header.top { padding: 48px 0 28px; }
+.wordmark { font-weight: 800; font-size: clamp(40px, 7vw, 76px); line-height: .95; letter-spacing: -0.03em; margin: 0; }
+.intro { max-width: 64ch; margin: 18px 0 0; font-size: 18px; color: var(--ink); }
+.links { margin-top: 14px; font-size: 15px; color: var(--ink-2); }
+.links a { color: var(--ink); text-underline-offset: 3px; }
+.findings { list-style: none; margin: 32px 0 0; padding: 22px 0 0; border-top: 2px solid var(--ink);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.findings li { font-size: 15.5px; color: var(--ink-2); max-width: 36ch; }
+.findings b { display: block; color: var(--ink); font-size: 26px; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 4px; }
+
+/* Layout */
+main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 40px; padding: 36px 0 80px; align-items: start; }
+nav.index { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; padding-right: 4px; }
+nav.index h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; color: var(--ink-2); }
+nav.index ol { list-style: none; margin: 0; padding: 0; }
+nav.index button {
+  all: unset; box-sizing: border-box; display: grid; grid-template-columns: 12px 1fr; gap: 10px;
+  width: 100%; padding: 10px 10px 10px 8px; cursor: pointer; border-radius: 6px;
+}
+nav.index button:hover { background: var(--desk-2); }
+nav.index button[aria-current="true"] { background: var(--paper); box-shadow: 0 1px 0 var(--rule); }
+nav.index button:focus-visible { outline: 2px solid var(--focus); }
+.dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 7px; }
+.ix-head { font-weight: 600; font-size: 15px; line-height: 1.3; }
+.ix-meta { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+
+/* Caption above the receipt */
+.caption { max-width: 68ch; margin-bottom: 22px; }
+.caption h2 { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 800; }
+.caption p { margin: 0; font-size: 17px; }
+
+/* The receipt itself */
+.receipt {
+  --tooth: 9px;
+  position: relative; max-width: 760px; background: var(--paper);
+  font: 13.5px/1.6 var(--mono); padding: 34px 30px 38px;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(var(--tooth) * 2) 51% repeat-x,
+                conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(var(--tooth) * 2) 51% repeat-x;
+          mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(var(--tooth) * 2) 51% repeat-x,
+                conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(var(--tooth) * 2) 51% repeat-x;
+  filter: drop-shadow(0 1px 0 var(--rule));
+}
+.r-title { font-weight: 600; font-size: 15px; margin: 0 150px 14px 0; overflow-wrap: anywhere; }
+.leaders { margin: 0; padding: 0; list-style: none; }
+.leaders li { display: flex; gap: 6px; align-items: baseline; }
+.leaders li span:first-child { white-space: nowrap; }
+.leaders li i { flex: 1; border-bottom: 1px dotted var(--ink-2); transform: translateY(-4px); min-width: 12px; }
+.leaders li span:last-child { text-align: right; overflow-wrap: anywhere; }
+.r-sec { border-top: 1px dashed var(--ink-2); margin-top: 18px; padding-top: 14px; }
+.r-sec > h3 { font: 600 13.5px/1.4 var(--mono); margin: 0 0 8px; }
+.gate { display: grid; grid-template-columns: 4.2em 1fr auto; gap: 10px; }
+.ok { color: var(--pass); font-weight: 600; }
+.no { color: var(--fail); font-weight: 600; }
+.mute { color: var(--ink-2); }
+details { margin: 4px 0; }
+summary { cursor: pointer; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "+"; display: inline-block; width: 1.4em; color: var(--ink-2); }
+details[open] > summary::before { content: "\2212"; }
+.attempt > summary { display: grid; grid-template-columns: 1.4em minmax(9em, 1.4fr) repeat(4, minmax(4.5em, auto)); gap: 8px; padding: 4px 0; }
+.attempt > summary::before { width: auto; }
+.attempt-body { padding: 6px 0 10px 1.4em; }
+.cols-head { display: grid; grid-template-columns: 1.4em minmax(9em, 1.4fr) repeat(4, minmax(4.5em, auto)); gap: 8px; color: var(--ink-2); }
+.quote { margin: 6px 0; padding-left: 12px; border-left: 2px solid var(--rule); white-space: pre-wrap; overflow-wrap: anywhere; }
+pre { margin: 6px 0; padding: 10px; background: var(--desk); border-radius: 4px; overflow: auto; max-height: 340px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.trace { list-style: none; margin: 6px 0; padding: 0; counter-reset: s; }
+.trace li { counter-increment: s; display: grid; grid-template-columns: 3em 7.5em 1fr; gap: 8px; padding: 2px 0; }
+.trace li::before { content: counter(s); color: var(--ink-2); text-align: right; }
+.trace .tool { color: var(--honest); }
+.trace .arg { overflow-wrap: anywhere; }
+.trace .out { grid-column: 3 / 4; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 5.2em; overflow: hidden; }
+.diff { white-space: pre; overflow: auto; max-height: 520px; background: var(--desk); padding: 10px; border-radius: 4px; font: 12.5px/1.5 var(--mono); }
+.diff .a { background: var(--add); display: block; }
+.diff .d { background: var(--del); display: block; }
+.diff .h { color: var(--ink-2); display: block; }
+.total { display: flex; justify-content: space-between; font-weight: 600; font-size: 18px; margin-top: 8px; }
+.r-foot { text-align: center; color: var(--ink-2); margin-top: 18px; font-size: 12px; overflow-wrap: anywhere; }
+
+/* The stamp: the one loud thing on the page */
+.stamp {
+  position: absolute; top: 26px; right: 22px; transform: rotate(-8deg);
+  font: 800 19px/1.05 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; text-align: center;
+  padding: 8px 12px; border: 4px double currentColor; border-radius: 6px;
+  mix-blend-mode: var(--stamp-blend); opacity: .88; max-width: 150px;
+}
+.stamp small { display: block; font: 600 12px/1.3 var(--mono); letter-spacing: 0; text-transform: none; margin-top: 4px; }
+.stamp.land { animation: land .32s cubic-bezier(.2,.9,.3,1.3) both; }
+@keyframes land { from { transform: rotate(-14deg) scale(1.6); opacity: 0; } to { transform: rotate(-8deg) scale(1); opacity: .88; } }
+@media (prefers-reduced-motion: reduce) { .stamp.land { animation: none; } }
+
+.theme-toggle { all: unset; cursor: pointer; font-size: 14px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+.theme-toggle:focus-visible { outline: 2px solid var(--focus); }
+footer.bottom { padding: 0 0 48px; color: var(--ink-2); font-size: 14px; }
+
+@media (max-width: 880px) {
+  main { grid-template-columns: 1fr; gap: 24px; }
+  nav.index { position: static; max-height: 46vh; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
+  .findings { grid-template-columns: 1fr; gap: 16px; }
+  .receipt { padding: 30px 16px 34px; }
+  .r-title { margin-right: 0; margin-top: 70px; }
+  .stamp { top: 22px; right: 14px; }
+  .attempt > summary, .cols-head { grid-template-columns: 1.4em 1fr auto auto; }
+  .hide-sm { display: none; }
+  .trace li { grid-template-columns: 2.4em 1fr; }
+  .trace .arg { grid-column: 2 / 3; }
+  .trace .out { grid-column: 2 / 3; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="wordmark">ProofForge</h1>
+    <p class="intro" id="intro"></p>
+    <p class="links"><a href="https://github.com/trinath122/proofforge">Source code and benchmarks</a> &nbsp; <button class="theme-toggle" id="theme" type="button">Switch to dark</button></p>
+    <ul class="findings" id="findings"></ul>
+  </header>
+  <main>
+    <nav class="index" aria-label="Runs">
+      <h2 id="count">Runs</h2>
+      <ol id="runs"></ol>
+    </nav>
+    <section aria-live="polite" id="view"></section>
+  </main>
+  <footer class="bottom">Receipts are generated by <code>proofforge site</code> from the JSON receipts each run writes. Nothing on this page calls a model.</footer>
+</div>
+<script src="runs.js"></script>
+<script>
+(function () {
+  "use strict";
+  var data = window.PROOFFORGE || { runs: [], findings: [], intro: "" };
+  var SUITES = {
+    impossible: "Impossible task",
+    harbor: "Harbor task",
+    realworld: "Real-world bug",
+    pipeline: "PipelineBench",
+    other: "Task"
+  };
+  var VERDICTS = {
+    verified: ["Verified", "pass"],
+    failed: ["Not verified", "fail"],
+    budget_exceeded: ["Over budget", "amber"],
+    honest: ["Reported impossible", "honest"],
+    reported_impossible: ["Reported impossible", "honest"],
+    cheated: ["Gamed the tests", "fail"],
+    gave_up: ["Gave up", "amber"],
+    infra_error: ["Did not run", "amber"],
+    already_passing: ["Already passing", "amber"],
+    reproduction_failed: ["Setup failed", "amber"]
+  };
+  var COLORS = { pass: "var(--pass)", fail: "var(--fail)", honest: "var(--honest)", amber: "var(--amber)" };
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function suiteName(run) {
+    if (run.suite === "harbor") {
+      return /^\[Harbor\] instance_/.test(run.title) ? "SWE-bench Pro" : "Long-Horizon Terminal-Bench";
+    }
+    var tour = run.attempts.some(function (a) { return a.label === "breaker"; });
+    return tour ? "Tournament" : SUITES[run.suite] || "Task";
+  }
+  function verdictOf(run) { return VERDICTS[run.verdict] || [run.verdict, "amber"]; }
+  function money(x) { return "$" + Number(x).toFixed(x < 1 ? 4 : 2); }
+  function shortTitle(t) { return t.replace(/^\[[^\]]+\]\s*/, ""); }
+  function leaders(rows) {
+    return '<ul class="leaders">' + rows.map(function (r) {
+      return "<li><span>" + esc(r[0]) + "</span><i></i><span>" + r[1] + "</span></li>";
+    }).join("") + "</ul>";
+  }
+  function gateLine(g) {
+    return '<div class="gate"><span class="' + (g.passed ? "ok" : "no") + '">' + (g.passed ? "PASS" : "FAIL") +
+      "</span><span>" + esc(g.name) + ' <span class="mute">(' + (g.kind === "holdout" ? "hidden" : "visible") +
+      ")</span></span><span class=\"mute\">" + g.seconds + "s</span></div>";
+  }
+  function gateDetail(g) {
+    return "<details><summary>" + esc(g.name) + " output</summary><pre>" + esc(g.output || "(no output)") + "</pre></details>";
+  }
+  function diffHtml(d) {
+    return d.split("\n").map(function (line) {
+      var cls = /^\+(?!\+\+)/.test(line) ? "a" : /^-(?!--)/.test(line) ? "d" : /^(@@|diff |index |\+\+\+|---)/.test(line) ? "h" : "";
+      return cls ? '<span class="' + cls + '">' + esc(line) + "</span>" : esc(line) + "\n";
+    }).join("");
+  }
+  function attemptHtml(a) {
+    var body = "";
+    if (a.impossible) body += "<div><b>Reported impossible:</b></div><div class=\"quote\">" + esc(a.impossible) + "</div>";
+    if (a.summary) body += "<div><b>Agent's summary:</b></div><div class=\"quote\">" + esc(a.summary) + "</div>";
+    if (a.flags) body += '<div class="no">' + esc(a.flags) + "</div>";
+    if (a.gates.length) body += "<div style=\"margin-top:8px\">" + a.gates.map(gateLine).join("") + a.gates.map(gateDetail).join("") + "</div>";
+    if (a.trace.length) {
+      body += "<details><summary>Every step (" + a.trace.length + " tool calls)</summary><ol class=\"trace\">" +
+        a.trace.map(function (s) {
+          return '<li><span class="tool">' + esc(s.tool) + '</span><span class="arg">' + esc(s.arg) + "</span>" +
+            (s.out ? '<span class="out">' + esc(s.out) + "</span>" : "") + "</li>";
+        }).join("") + "</ol></details>";
+    }
+    return '<details class="attempt"><summary><span>' + esc(a.label) + ' <span class="mute">' + esc(a.model) + "</span></span>" +
+      "<span>" + (a.steps || "-") + "</span><span>" + esc(a.visible) + '</span><span class="hide-sm">' + esc(a.hidden) +
+      '</span><span class="hide-sm">' + money(a.cost) + "</span></summary><div class=\"attempt-body\">" + (body || '<span class="mute">No details recorded.</span>') + "</div></details>";
+  }
+  function render(run, animate) {
+    var v = verdictOf(run);
+    var reward = run.reward != null ? "<small>reward " + run.reward.toFixed(2) + "</small>" : "";
+    var tour = run.attempts.some(function (a) { return a.breaker; });
+    var html = '<div class="caption"><h2>' + esc(run.headline || shortTitle(run.title)) + "</h2><p>" + esc(run.story) + "</p></div>";
+    html += '<article class="receipt" aria-label="Receipt for ' + esc(shortTitle(run.title)) + '">';
+    html += '<div class="stamp' + (animate ? " land" : "") + '" style="color:' + COLORS[v[1]] + '">' + esc(v[0]) + reward + "</div>";
+    html += '<p class="r-title">' + esc(shortTitle(run.title)) + "</p>";
+    html += leaders([
+      ["Benchmark", esc(suiteName(run))],
+      ["Run", esc(run.id)],
+      ["Date", esc(run.date)],
+      ["Mode", esc(run.mode)],
+      ["Wall time", esc(Math.round(run.seconds / 6) / 10) + " min"]
+    ]);
+    if (run.reproduction.length) {
+      html += '<div class="r-sec"><h3>Problem proved before any change</h3>' + run.reproduction.map(gateLine).join("") + "</div>";
+    }
+    html += '<div class="r-sec"><h3>Attempts' + (tour ? " (tournament)" : "") + "</h3>" +
+      '<div class="cols-head"><span></span><span>who</span><span>steps</span><span>visible</span><span class="hide-sm">hidden</span><span class="hide-sm">cost</span></div>' +
+      run.attempts.map(attemptHtml).join("") + "</div>";
+    if (tour) {
+      html += '<div class="r-sec"><h3>Breaker tests passed</h3>' + leaders(run.attempts.filter(function (a) { return a.breaker; }).map(function (a) {
+        return [a.label, esc(a.breaker)];
+      })) + "</div>";
+    }
+    html += '<div class="r-sec"><h3>Verdict</h3>' + (run.final.length ? run.final.map(gateLine).join("") : "") +
+      '<div class="quote">' + esc(run.note) + "</div></div>";
+    if (run.diff) {
+      html += '<div class="r-sec"><details><summary>The change (' + run.diff.split("\n").length + " lines of diff" + (run.diff_truncated ? ", truncated" : "") +
+        ')</summary><div class="diff">' + diffHtml(run.diff) + "</div></details></div>";
+    }
+    html += '<div class="r-sec total"><span>Total model cost</span><span>' + money(run.cost) + "</span></div>";
+    html += '<div class="r-foot">Oracle ' + esc(run.oracle.slice(0, 16)) + " &middot; " + run.protected + " frozen files</div>";
+    html += "</article>";
+    document.getElementById("view").innerHTML = html;
+  }
+  function select(id, animate) {
+    var run = data.runs.filter(function (r) { return r.id === id; })[0] || data.runs[0];
+    if (!run) return;
+    Array.prototype.forEach.call(document.querySelectorAll("#runs button"), function (b) {
+      b.setAttribute("aria-current", b.dataset.id === run.id ? "true" : "false");
+    });
+    render(run, animate);
+    if (location.hash !== "#" + run.id) history.replaceState(null, "", "#" + run.id);
+  }
+
+  document.getElementById("intro").textContent = data.intro;
+  document.getElementById("findings").innerHTML = data.findings.map(function (f) {
+    return "<li><b>" + esc(f.number) + "</b>" + esc(f.text) + "</li>";
+  }).join("");
+  document.getElementById("count").textContent = data.runs.length + " runs";
+  document.getElementById("runs").innerHTML = data.runs.map(function (r) {
+    var v = verdictOf(r);
+    return '<li><button type="button" data-id="' + esc(r.id) + '"><span class="dot" style="background:' + COLORS[v[1]] +
+      '" aria-hidden="true"></span><span><span class="ix-head">' + esc(r.headline || shortTitle(r.title)) +
+      '</span><span class="ix-meta" style="display:block">' + esc(suiteName(r)) + ", " + esc(v[0].toLowerCase()) + "</span></span></button></li>";
+  }).join("");
+  document.getElementById("runs").addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    select(b.dataset.id, true);
+    if (window.matchMedia("(max-width: 880px)").matches) document.getElementById("view").scrollIntoView({ block: "start" });
+  });
+  window.addEventListener("hashchange", function () { select(location.hash.slice(1), true); });
+
+  var toggle = document.getElementById("theme");
+  function isDark() {
+    var t = document.documentElement.getAttribute("data-theme");
+    return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function label() { toggle.textContent = isDark() ? "Switch to light" : "Switch to dark"; }
+  try { var saved = localStorage.getItem("pf-theme"); if (saved) document.documentElement.setAttribute("data-theme", saved); } catch (e) {}
+  label();
+  toggle.addEventListener("click", function () {
+    var next = isDark() ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("pf-theme", next); } catch (e) {}
+    label();
+  });
+
+  select(location.hash.slice(1), true);
+})();
+</script>
+</body>
+</html>

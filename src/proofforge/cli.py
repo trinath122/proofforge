@@ -25,6 +25,7 @@ from proofforge.models.registry import MODELS, Mode
 from proofforge.playbooks import CaseValidation, harbor, impossible
 from proofforge.receipts import Receipt, write_receipt
 from proofforge.sandbox.contree import ContreeSandbox
+from proofforge.site import build_site
 
 app = typer.Typer(add_completion=False, help="ProofForge: no 'done' without proof.")
 console = Console()
@@ -89,6 +90,19 @@ def _report(receipt: Receipt, settings: Settings) -> None:
     )
     if receipt.note:
         console.print(f"[dim]{receipt.note}[/dim]")
+
+
+@app.command()
+def site(
+    showcase: Annotated[Path, typer.Option(exists=True, readable=True)] = Path(
+        "site/showcase.json"
+    ),
+    receipts: Annotated[Path, typer.Option(exists=True, file_okay=False)] = Path("receipts"),
+    out: Annotated[Path, typer.Option()] = Path("docs"),
+) -> None:
+    """Build the static receipts site (served by GitHub Pages from docs/). Costs nothing."""
+    page = build_site(receipts, showcase, out)
+    console.print(f"Wrote {page}. Open it in a browser, or push and enable GitHub Pages on docs/.")
 
 
 @app.command()

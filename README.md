@@ -100,6 +100,13 @@ uv run proofforge bench --suite harbor --root $T --ids-file ../SWE-bench_Pro-os/
 `--validate` is free: it proves on Nebius that each task fails as shipped and passes with the
 reference solution, before any model is called.
 
+### Receipts site
+
+`docs/` is a static page that replays real receipts: the checks that proved each bug, every
+step the agent took, the hidden-check verdict, the diff and the cost. It makes no model
+calls. Rebuild it after new runs with `uv run proofforge site` (runs to show are listed in
+`site/showcase.json`); GitHub Pages serves it from `docs/` on `main`.
+
 ### Long-Horizon Terminal-Bench
 
 Six tasks from [Long-Horizon Terminal-Bench](https://github.com/zli12321/LHTB) run through the
