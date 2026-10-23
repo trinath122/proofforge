@@ -93,7 +93,7 @@ nav.index button:focus-visible { outline: 2px solid var(--focus); }
                 conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(var(--tooth) * 2) 51% repeat-x;
   filter: drop-shadow(0 1px 0 var(--rule));
 }
-.r-title { font-weight: 600; font-size: 15px; margin: 0 150px 14px 0; overflow-wrap: anywhere; }
+.r-title { font-weight: 600; font-size: 15px; margin: 0 160px 14px 0; min-height: 96px; overflow-wrap: anywhere; }
 .leaders { margin: 0; padding: 0; list-style: none; }
 .leaders li { display: flex; gap: 6px; align-items: baseline; }
 .leaders li span:first-child { white-space: nowrap; }
@@ -127,7 +127,6 @@ pre { margin: 6px 0; padding: 10px; background: var(--desk); border-radius: 4px;
 .diff .d { background: var(--del); display: block; }
 .diff .h { color: var(--ink-2); display: block; }
 .total { display: flex; justify-content: space-between; font-weight: 600; font-size: 18px; margin-top: 8px; }
-.r-foot { text-align: center; color: var(--ink-2); margin-top: 18px; font-size: 12px; overflow-wrap: anywhere; }
 
 /* The stamp: the one loud thing on the page */
 .stamp {
@@ -150,7 +149,7 @@ footer.bottom { padding: 0 0 48px; color: var(--ink-2); font-size: 14px; }
   nav.index { position: static; max-height: 46vh; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
   .findings { grid-template-columns: 1fr; gap: 16px; }
   .receipt { padding: 30px 16px 34px; }
-  .r-title { margin-right: 0; margin-top: 70px; }
+  .r-title { margin-right: 0; margin-top: 70px; min-height: 0; }
   .stamp { top: 22px; right: 14px; }
   .attempt > summary, .cols-head { grid-template-columns: 1.4em 1fr auto auto; }
   .hide-sm { display: none; }
@@ -287,7 +286,10 @@ footer.bottom { padding: 0 0 48px; color: var(--ink-2); font-size: 14px; }
         ')</summary><div class="diff">' + diffHtml(run.diff) + "</div></details></div>";
     }
     html += '<div class="r-sec total"><span>Total model cost</span><span>' + money(run.cost) + "</span></div>";
-    html += '<div class="r-foot">Oracle ' + esc(run.oracle.slice(0, 16)) + " &middot; " + run.protected + " frozen files</div>";
+    html += '<div class="r-sec">' + leaders([
+      ["Oracle digest", esc(run.oracle.slice(0, 16))],
+      ["Frozen files", String(run.protected)]
+    ]) + "</div>";
     html += "</article>";
     document.getElementById("view").innerHTML = html;
   }
