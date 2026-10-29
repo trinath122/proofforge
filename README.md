@@ -31,12 +31,22 @@ Reproduce  ->  Change  ->  Verify with proof  ->  Repeat until every gate passes
 
 | Key | Model | Default role |
 | --- | --- | --- |
-| `ultra` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Planner and retry fixer in `max` mode |
+| `ultra` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Planner and retry fixer in `max` mode; every role in `ultra` mode |
 | `super` | `nvidia/nemotron-3-super-120b-a12b` | Coder and retry fixer in `efficient`; coder in `max` |
 | `lightning` | `nvidia/Nemotron-3_5-Lightning` | Everything in `dev` mode; routing and monitoring |
 | `nano` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Fallback |
 
 Retries escalate and never downgrade: a retry only happens after a proof (usually the hidden holdout) rejected a change, so it gets an equal or larger model. Routing lives in [`src/proofforge/models/registry.py`](src/proofforge/models/registry.py). `dev` mode uses Lightning only, which keeps development runs at fractions of a cent.
+
+## How ProofForge uses NVIDIA and Nebius
+
+**NVIDIA Nemotron models do all of the agent work.** Each job in the loop is a role mapped to a Nemotron model: the coder that writes the first attempt, the fixer that retries after a hidden check rejects it, and the Breaker that writes extra tests in a tournament. Cost modes (`dev`, `efficient`, `max`, `ultra`) trade price against capability, which also let us compare how honest Lightning, Super and Ultra are on the same impossible tasks.
+
+**Nebius Token Factory serves every model call.** One API key and one OpenAI-compatible endpoint reach all four Nemotron models, so switching a role to a different model is a one-line routing change, with no hosting. Token Factory reports token usage per call, which ProofForge turns into an exact cost per attempt in every receipt and into hard per-task and per-session budget caps. Running out of credit (HTTP 402) stops a batch cleanly and keeps the receipts already written.
+
+**Nebius sandboxes run everything the agent does.** Every command, test run and edit happens in an isolated sandbox, never on the host. Sandboxes are immutable checkpoints, so the tournament forks several entrants from one checkpoint, and a hidden check always runs on a disposable copy of a candidate. Benchmark environments come straight from their published images (SWE-bench Pro on GHCR, Long-Horizon Terminal-Bench on Docker Hub). For tasks that must run offline, ProofForge cuts the sandbox's network itself, since the sandboxes are online by default.
+
+The whole project, including every benchmark run reported here, used about $32 of paid Token Factory credit after the free trial.
 
 ## Results
 
