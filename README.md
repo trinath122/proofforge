@@ -4,6 +4,8 @@
 
 Coding agents routinely claim success they cannot back up, and they are known to game their own tests. ProofForge treats every change as unproven until executable gates pass inside an isolated [Nebius Token Factory Sandbox](https://docs.tokenfactory.nebius.com/sandboxes/overview), including hidden holdout checks the agent never sees. Every run ships a replayable proof receipt.
 
+**Live receipts:** https://trinath122.github.io/proofforge/ (every run, its claim vs. what the hidden checks found, and its cost)
+
 Built for the [Nebius x NVIDIA Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com/) (Coding and Agentic Engineering track).
 
 ## How it works
@@ -66,7 +68,7 @@ the `proofforge` or `pytest` launchers, use `uv run python -m proofforge ...` an
 `uv run python -m pytest` instead.
 
 ```bash
-git clone <this repo> && cd proofforge
+git clone https://github.com/trinath122/proofforge.git && cd proofforge
 uv sync
 ```
 
